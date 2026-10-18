@@ -1439,6 +1439,17 @@
       accent-color: var(--brand-orange);
     }
 
+    .google-auth-panel {
+      margin-bottom: 16px;
+      padding: 12px;
+      border: 1px solid #3a3a3a;
+      border-radius: 12px;
+    }
+
+    .google-auth-button {
+      min-height: 40px;
+    }
+
     .edit-match-list {
       display: grid;
       gap: 8px;
@@ -1499,6 +1510,10 @@
       border-color: #e5e5e5;
       background-color: #f7f7f7;
       color: #191919;
+    }
+
+    body.light-mode .google-auth-panel {
+      border-color: #e5e5e5;
     }
 
     @media (max-width: 575.98px) {
@@ -1606,7 +1621,11 @@
         <button id="btnCerrarEdicion" class="btn-close btn-close-white" type="button" aria-label="Cerrar"></button>
       </div>
       <div class="app-dialog-body">
-        <p class="text-muted small">Inicia sesión con una cuenta que tenga permiso de edición en Google Sheets.</p>
+        <div class="google-auth-panel">
+          <div id="estadoSesionEdicion" class="small mb-2" role="status" aria-live="polite">Inicia sesión con la cuenta administradora para habilitar cambios.</div>
+          <div id="botonGoogleEdicion" class="google-auth-button"></div>
+          <button id="btnCerrarSesionEdicion" class="btn btn-sm btn-outline-secondary mt-2" type="button" hidden>Cerrar sesión</button>
+        </div>
         <label for="codigoProductoEdicion" class="form-label">Código del producto</label>
         <input id="codigoProductoEdicion" class="form-control mb-3" type="text" maxlength="80" required>
         <label for="descripcionProductoEdicion" class="form-label">Descripción del producto</label>
@@ -1642,6 +1661,11 @@
         <button id="btnCerrarCargaMasiva" class="btn-close btn-close-white" type="button" aria-label="Cerrar"></button>
       </div>
       <div class="app-dialog-body">
+        <div class="google-auth-panel">
+          <div id="estadoSesionMasiva" class="small mb-2" role="status" aria-live="polite">Inicia sesión con la cuenta administradora para subir imágenes.</div>
+          <div id="botonGoogleMasiva" class="google-auth-button"></div>
+          <button id="btnCerrarSesionMasiva" class="btn btn-sm btn-outline-secondary mt-2" type="button" hidden>Cerrar sesión</button>
+        </div>
         <p class="text-muted small">Selecciona imágenes JPG, PNG o WEBP. El nombre del archivo, sin extensión, debe coincidir exactamente con el código del producto (por ejemplo, <strong>ABC-123.jpg</strong>). Máximo 3 MB por archivo.</p>
         <p class="text-muted small">Las imágenes se cargan una por una. Si un producto ya tiene imagen, se conserva y el archivo se reporta como omitido.</p>
         <label for="archivosImagenesMasivas" class="form-label">Archivos de imagen</label>
@@ -1663,9 +1687,12 @@
   </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+  <script src="https://accounts.google.com/gsi/client" defer></script>
   <script>
     const URL_API_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbwVvAAODNFh4408zZRaxd89p-rWIjXvBWc5_wH3_ofX0fz4NJUqpHrvFLaIWoLkkoAv/exec";
     const URL_API_EDICION_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbz6CAkq2nh-FnyUE6jE4dTmwPbIkFog10jEr4xuJp11-XbqB_mceR5AAiIhuuoIiw8kCg/exec";
+    const GOOGLE_CLIENT_ID = "359363906061-o8q5s2068sbbmon7ohsgnvctvlm12ls6.apps.googleusercontent.com";
+    const CORREO_ADMIN_CATALOGO = "limzagroup0@gmail.com";
     const CACHE_CATALOGO_LOCAL_KEY = 'limza-catalogo-v1';
     const CACHE_CATALOGO_LOCAL_MAX_AGE_MS = 60 * 1000;
 
@@ -1674,6 +1701,10 @@
     let catalogoRenderizado = false;
     let posicionScrollAntesDeBuscar = null;
     let logosMarcas = {};
+    let credencialGoogleCatalogo = '';
+    let correoGoogleCatalogo = '';
+    let expiracionGoogleCatalogo = 0;
+    let googleIdentityInicializado = false;
 
     const getById = (id) => document.getElementById(id);
 
@@ -1690,6 +1721,8 @@
       getById('btnCancelarEdicion').addEventListener('click', cerrarDialogoEdicion);
       getById('btnCerrarCargaMasiva').addEventListener('click', cerrarDialogoCargaMasiva);
       getById('btnCancelarCargaMasiva').addEventListener('click', cerrarDialogoCargaMasiva);
+      getById('btnCerrarSesionEdicion').addEventListener('click', cerrarSesionGoogleCatalogo);
+      getById('btnCerrarSesionMasiva').addEventListener('click', cerrarSesionGoogleCatalogo);
       getById('archivosImagenesMasivas').addEventListener('change', prepararCargaMasiva);
       getById('btnIniciarCargaMasiva').addEventListener('click', subirImagenesMasivas);
       getById('dialogoCargaMasiva').addEventListener('cancel', event => {
@@ -1727,6 +1760,117 @@
 
       cargarCatalogoRemoto();
     }
+
+    function inicializarInicioSesionGoogle(tipoDialogo) {
+      if (!window.google?.accounts?.id) {
+        const mensaje = 'No se pudo cargar el inicio de sesión de Google. Recarga la página e inténtalo de nuevo.';
+        mostrarEstado(
+          getById(tipoDialogo === 'edicion' ? 'estadoSesionEdicion' : 'estadoSesionMasiva'),
+          mensaje,
+          'error'
+        );
+        return;
+      }
+      if (!googleIdentityInicializado) {
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: recibirCredencialGoogle
+        });
+        googleIdentityInicializado = true;
+        actualizarEstadoAutenticacionGoogle();
+      }
+
+      const contenedor = getById(tipoDialogo === 'edicion' ? 'botonGoogleEdicion' : 'botonGoogleMasiva');
+      if (contenedor.dataset.googleButtonRendered !== 'true') {
+        window.google.accounts.id.renderButton(contenedor, {
+          type: 'standard',
+          theme: 'outline',
+          size: 'medium',
+          text: 'signin_with',
+          shape: 'rectangular',
+          logo_alignment: 'left'
+        });
+        contenedor.dataset.googleButtonRendered = 'true';
+      }
+    }
+
+    function recibirCredencialGoogle(respuesta) {
+      try {
+        const partes = String(respuesta.credential || '').split('.');
+        if (partes.length !== 3) throw new Error('Google no devolvió una credencial válida.');
+        const payloadCodificado = partes[1].replace(/-/g, '+').replace(/_/g, '/');
+        const payload = JSON.parse(atob(payloadCodificado.padEnd(Math.ceil(payloadCodificado.length / 4) * 4, '=')));
+        const correo = String(payload.email || '').trim().toLowerCase();
+        const expiracion = Number(payload.exp) * 1000;
+        if (!payload.email_verified || correo !== CORREO_ADMIN_CATALOGO) {
+          credencialGoogleCatalogo = '';
+          correoGoogleCatalogo = '';
+          expiracionGoogleCatalogo = 0;
+          actualizarEstadoAutenticacionGoogle('Esta cuenta no está autorizada como administradora del catálogo.', 'error');
+          return;
+        }
+        if (!Number.isFinite(expiracion) || expiracion <= Date.now()) {
+          throw new Error('La sesión de Google ya venció. Inicia sesión de nuevo.');
+        }
+
+        credencialGoogleCatalogo = respuesta.credential;
+        correoGoogleCatalogo = correo;
+        expiracionGoogleCatalogo = expiracion;
+        actualizarEstadoAutenticacionGoogle();
+      } catch (error) {
+        credencialGoogleCatalogo = '';
+        correoGoogleCatalogo = '';
+        expiracionGoogleCatalogo = 0;
+        actualizarEstadoAutenticacionGoogle(error.message || 'No se pudo validar la sesión de Google.', 'error');
+      }
+    }
+
+    function obtenerCredencialAdminGoogle() {
+      if (!credencialGoogleCatalogo || correoGoogleCatalogo !== CORREO_ADMIN_CATALOGO) return '';
+      if (expiracionGoogleCatalogo <= Date.now()) {
+        credencialGoogleCatalogo = '';
+        correoGoogleCatalogo = '';
+        expiracionGoogleCatalogo = 0;
+        actualizarEstadoAutenticacionGoogle('La sesión venció. Inicia sesión otra vez.', 'error');
+        return '';
+      }
+      return credencialGoogleCatalogo;
+    }
+
+    function actualizarEstadoAutenticacionGoogle(mensaje, tipo = '') {
+      const correo = obtenerCorreoAutenticadoGoogle();
+      const estado = correo
+        ? `Sesión iniciada como ${correo}.`
+        : (mensaje || `Inicia sesión con ${CORREO_ADMIN_CATALOGO} para habilitar cambios.`);
+      ['estadoSesionEdicion', 'estadoSesionMasiva'].forEach(id => {
+        mostrarEstado(getById(id), estado, tipo || (correo ? 'success' : ''));
+      });
+      ['btnCerrarSesionEdicion', 'btnCerrarSesionMasiva'].forEach(id => {
+        getById(id).hidden = !correo;
+      });
+      revisarFormularioEdicion();
+      if (getById('archivosImagenesMasivas')) prepararEstadoBotonCargaMasiva();
+    }
+
+    function cerrarSesionGoogleCatalogo() {
+      credencialGoogleCatalogo = '';
+      correoGoogleCatalogo = '';
+      expiracionGoogleCatalogo = 0;
+      if (window.google?.accounts?.id) window.google.accounts.id.disableAutoSelect();
+      actualizarEstadoAutenticacionGoogle('Sesión cerrada.');
+    }
+
+    function obtenerCorreoAutenticadoGoogle() {
+      return obtenerCredencialAdminGoogle() ? correoGoogleCatalogo : '';
+    }
+
+    function prepararEstadoBotonCargaMasiva() {
+      if (cargaMasivaEnCurso) return;
+      const hayArchivosValidos = Array.from(getById('resultadosCargaMasiva').children)
+        .some(fila => fila.lastElementChild?.dataset.valid === 'true');
+      getById('btnIniciarCargaMasiva').disabled = !hayArchivosValidos || !obtenerCredencialAdminGoogle();
+    }
+
     function leerTemaGuardado() {
       try {
         return localStorage.getItem('limza-tema') === 'claro' ? 'claro' : 'oscuro';
@@ -2005,6 +2149,7 @@
     function abrirDialogoEdicion() {
       cerrarMenu();
       getById('dialogoEdicion').showModal();
+      inicializarInicioSesionGoogle('edicion');
       getById('formularioEdicion').reset();
       limpiarImagenesEdicion();
       getById('codigoProductoEdicion').focus();
@@ -2023,6 +2168,7 @@
     function abrirDialogoCargaMasiva() {
       cerrarMenu();
       getById('dialogoCargaMasiva').showModal();
+      inicializarInicioSesionGoogle('masiva');
       getById('archivosImagenesMasivas').focus();
     }
 
@@ -2089,11 +2235,17 @@
       });
 
       mostrarEstado(getById('estadoCargaMasiva'), `${validos} de ${archivos.length} archivos listos para subir.`);
-      getById('btnIniciarCargaMasiva').disabled = validos === 0;
+      prepararEstadoBotonCargaMasiva();
     }
 
     async function subirImagenesMasivas() {
       if (cargaMasivaEnCurso) return;
+      const idToken = obtenerCredencialAdminGoogle();
+      if (!idToken) {
+        mostrarEstado(getById('estadoCargaMasiva'), `Inicia sesión con ${CORREO_ADMIN_CATALOGO} antes de subir imágenes.`, 'error');
+        prepararEstadoBotonCargaMasiva();
+        return;
+      }
       const archivos = Array.from(getById('archivosImagenesMasivas').files || []);
       const filas = Array.from(getById('resultadosCargaMasiva').children);
       const tareas = archivos.map((archivo, indice) => {
@@ -2129,6 +2281,7 @@
               headers: { 'Content-Type': 'text/plain;charset=utf-8', 'Accept': 'application/json' },
               body: JSON.stringify({
                 action: 'subirImagenProducto',
+                idToken,
                 codigo,
                 imagenProducto: { nombre: archivo.name, dataUrl }
               })
@@ -2276,8 +2429,9 @@
       const imagenValida = getById('imagenProductoEdicion').files.length > 0;
       const logoValido = Boolean(obtenerUrlLogoMarca(getById('marcaEdicion').value)) ||
         getById('imagenMarcaEdicion').files.length > 0;
+      const sesionValida = Boolean(obtenerCredencialAdminGoogle());
       getById('btnGuardarEdicion').disabled = !(
-        codigoValido && descripcionValida && precioValido && marcaValida && imagenValida && logoValido
+        codigoValido && descripcionValida && precioValido && marcaValida && imagenValida && logoValido && sesionValida
       );
     }
 
@@ -2342,7 +2496,8 @@
       event.preventDefault();
       const boton = getById('btnGuardarEdicion');
       revisarFormularioEdicion();
-      if (boton.disabled) return;
+      const idToken = obtenerCredencialAdminGoogle();
+      if (boton.disabled || !idToken) return;
 
       boton.disabled = true;
       mostrarEstado(getById('estadoEdicion'), 'Guardando el producto y sus imágenes en Google Sheets…');
@@ -2351,6 +2506,7 @@
         const archivoMarca = getById('imagenMarcaEdicion').files[0];
         const carga = {
           action: 'crearProducto',
+          idToken,
           codigo: getById('codigoProductoEdicion').value.trim(),
           nombre: getById('descripcionProductoEdicion').value.trim(),
           precio: Number(getById('precioProductoEdicion').value),
