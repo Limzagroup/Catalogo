@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <title>Catálogo de LIMZA GROUP</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" type="image/x-icon" href="https://limzagroup.github.io/pedidos/favicon.ico">
-  <link rel="preconnect" href="https://limzagroup.github.io" crossorigin>
-  <link rel="preload" as="image" href="https://limzagroup.github.io/pedidos/LIMZAGROUP_LOGO.webp" fetchpriority="high">
+  <link rel="icon" type="image/x-icon" href="https://raw.githubusercontent.com/Limzagroup/Catalogo/main/favicon.ico">
+  <link rel="preconnect" href="https://raw.githubusercontent.com" crossorigin>
+  <link rel="preload" as="image" href="https://raw.githubusercontent.com/Limzagroup/Catalogo/main/LOGO_LIMZA_WHITE.webp" fetchpriority="high">
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
@@ -1516,7 +1516,7 @@
   <nav class="navbar navbar-dark sticky-top" aria-label="Navegación principal" style="background-color: var(--navbar-bg); z-index: 1050; border-bottom: 3px solid var(--brand-orange);">
     <div class="container py-2 d-flex justify-content-center align-items-center">
       <!-- LOGOTIPO CORPORATIVO -->
-      <img src="https://limzagroup.github.io/pedidos/LIMZAGROUP_LOGO.webp" alt="LIMZA GROUP" width="220" height="55" fetchpriority="high" style="max-height: 55px; width: auto; object-fit: contain;">
+      <img src="https://raw.githubusercontent.com/Limzagroup/Catalogo/main/LOGO_LIMZA_WHITE.webp" alt="LIMZA GROUP" width="220" height="55" fetchpriority="high" style="max-height: 55px; width: auto; object-fit: contain;">
       <button id="btnAbrirMenu" class="menu-toggle" type="button" aria-label="Abrir menú" aria-expanded="false" aria-controls="menuPrincipal">
         <i class="bi bi-list" aria-hidden="true"></i>
       </button>
@@ -1531,7 +1531,7 @@
         </button>
         <button id="btnAbrirEdicion" type="button">
           <i class="bi bi-pencil-square" aria-hidden="true"></i>
-          <span>Modificar Catálogo</span>
+          <span>Agregar producto</span>
         </button>
       </nav>
     </div>
@@ -1592,33 +1592,34 @@
   <dialog id="dialogoEdicion" class="app-dialog" aria-labelledby="tituloDialogoEdicion">
     <form id="formularioEdicion" novalidate>
       <div class="app-dialog-header">
-        <h2 id="tituloDialogoEdicion">Modificar catálogo</h2>
+        <h2 id="tituloDialogoEdicion">Agregar producto al catálogo</h2>
         <button id="btnCerrarEdicion" class="btn-close btn-close-white" type="button" aria-label="Cerrar"></button>
       </div>
       <div class="app-dialog-body">
         <p class="text-muted small">Inicia sesión con una cuenta que tenga permiso de edición en Google Sheets.</p>
-        <label for="buscarProductoEdicion" class="form-label">Buscar producto por código o descripción</label>
-        <input id="buscarProductoEdicion" class="form-control mb-2" type="search" autocomplete="off" placeholder="Escribe código o descripción">
-        <div id="coincidenciasEdicion" class="edit-match-list mb-3" role="listbox" aria-label="Productos encontrados"></div>
-        <input id="filaProductoEdicion" type="hidden">
-        <div id="camposEdicion" hidden>
-          <label for="marcaEdicion" class="form-label">Marca</label>
-          <input id="marcaEdicion" class="form-control mb-3" type="text" list="marcasExistentes" maxlength="80" required>
-          <datalist id="marcasExistentes"></datalist>
-          <label for="imagenProductoEdicion" class="form-label">Imagen del producto</label>
-          <input id="imagenProductoEdicion" class="form-control mb-2" type="file" accept="image/jpeg,image/png,image/webp" required>
-          <img id="vistaImagenProducto" class="product-photo" alt="Vista previa de la imagen del producto" hidden>
-          <div id="estadoLogoMarca" class="small mb-2"></div>
-          <label for="imagenMarcaEdicion" class="form-label">Logo de la marca (si aún no existe)</label>
-          <input id="imagenMarcaEdicion" class="form-control" type="file" accept="image/jpeg,image/png,image/webp">
-          <img id="vistaImagenMarca" class="product-photo mt-2" alt="Vista previa del logo de la marca" hidden>
-        </div>
+        <label for="codigoProductoEdicion" class="form-label">Código del producto</label>
+        <input id="codigoProductoEdicion" class="form-control mb-3" type="text" maxlength="80" required>
+        <label for="descripcionProductoEdicion" class="form-label">Descripción del producto</label>
+        <textarea id="descripcionProductoEdicion" class="form-control mb-3" rows="2" maxlength="250" required></textarea>
+        <label for="precioProductoEdicion" class="form-label">Precio</label>
+        <input id="precioProductoEdicion" class="form-control mb-3" type="number" min="0" step="0.01" required>
+        <label for="marcaEdicion" class="form-label">Marca</label>
+        <input id="marcaEdicion" class="form-control mb-3" type="text" list="marcasExistentes" maxlength="80" required>
+        <datalist id="marcasExistentes"></datalist>
+        <label for="imagenProductoEdicion" class="form-label">Imagen del producto</label>
+        <input id="imagenProductoEdicion" class="form-control mb-2" type="file" accept="image/jpeg,image/png,image/webp" required>
+        <img id="vistaImagenProducto" class="product-photo" alt="Vista previa de la imagen del producto" hidden>
+        <div id="estadoLogoMarca" class="small mb-2"></div>
+        <img id="vistaLogoExistente" class="product-photo mb-2" alt="Logo existente de la marca" hidden>
+        <label for="imagenMarcaEdicion" class="form-label">Subir logo si la marca aún no tiene uno</label>
+        <input id="imagenMarcaEdicion" class="form-control" type="file" accept="image/jpeg,image/png,image/webp">
+        <img id="vistaImagenMarca" class="product-photo mt-2" alt="Vista previa del nuevo logo de la marca" hidden>
         <div id="estadoEdicion" class="small mt-3" role="status" aria-live="polite"></div>
       </div>
       <div class="app-dialog-footer">
         <button id="btnCancelarEdicion" class="btn btn-outline-primary" type="button">Cancelar</button>
         <button id="btnGuardarEdicion" class="btn btn-primary" type="submit" disabled>
-          <i class="bi bi-cloud-arrow-up me-2" aria-hidden="true"></i>Guardar cambios
+          <i class="bi bi-cloud-arrow-up me-2" aria-hidden="true"></i>Agregar producto
         </button>
       </div>
     </form>
@@ -1626,18 +1627,14 @@
 
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
   <script>
-    const URL_API_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbwVvAAODNFh4408zZRaxd89p-rWIjXvBWc5_wH3_ofX0fz4NJUqpHrvFLaIWoLkkoAv/exec";
+    const URL_API_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbz6CAkq2nh-FnyUE6jE4dTmwPbIkFog10jEr4xuJp11-XbqB_mceR5AAiIhuuoIiw8kCg/exec";
     const CACHE_CATALOGO_LOCAL_KEY = 'limza-catalogo-v1';
     const CACHE_CATALOGO_LOCAL_MAX_AGE_MS = 60 * 1000;
 
     let catalogo = [];
     let catalogoCacheCargado = false;
     let catalogoRenderizado = false;
-    let catalogoRemotoCargado = false;
-    let catalogoDatosEdicionDisponibles = false;
     let posicionScrollAntesDeBuscar = null;
-    let productoEdicionSeleccionado = null;
-    let temporizadorBusquedaEdicion = null;
     let logosMarcas = {};
 
     const getById = (id) => document.getElementById(id);
@@ -1652,8 +1649,10 @@
       getById('btnAbrirEdicion').addEventListener('click', abrirDialogoEdicion);
       getById('btnCerrarEdicion').addEventListener('click', cerrarDialogoEdicion);
       getById('btnCancelarEdicion').addEventListener('click', cerrarDialogoEdicion);
-      getById('buscarProductoEdicion').addEventListener('input', buscarProductosEdicion);
       getById('marcaEdicion').addEventListener('input', manejarCambioMarcaEdicion);
+      ['codigoProductoEdicion', 'descripcionProductoEdicion', 'precioProductoEdicion'].forEach(id => {
+        getById(id).addEventListener('input', revisarFormularioEdicion);
+      });
       getById('imagenProductoEdicion').addEventListener('change', () => previsualizarImagen('imagenProductoEdicion', 'vistaImagenProducto'));
       getById('imagenMarcaEdicion').addEventListener('change', () => previsualizarImagen('imagenMarcaEdicion', 'vistaImagenMarca'));
       getById('formularioEdicion').addEventListener('submit', guardarCambiosCatalogo);
@@ -1960,12 +1959,9 @@
     function abrirDialogoEdicion() {
       cerrarMenu();
       getById('dialogoEdicion').showModal();
-      getById('buscarProductoEdicion').focus();
-      getById('camposEdicion').hidden = true;
-      getById('coincidenciasEdicion').replaceChildren();
-      productoEdicionSeleccionado = null;
       getById('formularioEdicion').reset();
       limpiarImagenesEdicion();
+      getById('codigoProductoEdicion').focus();
       revisarFormularioEdicion();
       cargarLogosMarcas();
     }
@@ -1973,12 +1969,9 @@
     function cerrarDialogoEdicion() {
       getById('dialogoEdicion').close();
       getById('formularioEdicion').reset();
-      getById('buscarProductoEdicion').value = '';
       limpiarImagenesEdicion();
-      getById('camposEdicion').hidden = true;
-      getById('coincidenciasEdicion').replaceChildren();
-      productoEdicionSeleccionado = null;
       mostrarEstado(getById('estadoEdicion'), '');
+      revisarFormularioEdicion();
     }
 
     async function cargarLogosMarcas() {
@@ -2010,80 +2003,6 @@
       }
     }
 
-    function buscarProductosEdicion() {
-      clearTimeout(temporizadorBusquedaEdicion);
-      temporizadorBusquedaEdicion = setTimeout(renderizarCoincidenciasEdicion, 180);
-    }
-
-    function renderizarCoincidenciasEdicion() {
-      const consulta = getById('buscarProductoEdicion').value.trim().toLocaleLowerCase('es');
-      const contenedor = getById('coincidenciasEdicion');
-      contenedor.replaceChildren();
-      getById('camposEdicion').hidden = true;
-      productoEdicionSeleccionado = null;
-      limpiarImagenesEdicion();
-      if (!consulta) {
-        revisarFormularioEdicion();
-        return;
-      }
-      if (!catalogoRemotoCargado) {
-        mostrarEstado(getById('estadoEdicion'), 'Espera a que termine de cargar el catálogo actualizado.', 'error');
-        revisarFormularioEdicion();
-        return;
-      }
-      if (!catalogoDatosEdicionDisponibles) {
-        mostrarEstado(getById('estadoEdicion'), 'El servidor del catálogo debe actualizarse para habilitar la edición de productos.', 'error');
-        revisarFormularioEdicion();
-        return;
-      }
-
-      const coincidenciasCodigo = catalogo.filter(producto =>
-        String(producto.codigo || '').trim().toLocaleLowerCase('es') === consulta
-      );
-      const coincidencias = coincidenciasCodigo.length
-        ? coincidenciasCodigo
-        : catalogo.filter(producto =>
-          String(producto.nombre || '').toLocaleLowerCase('es').includes(consulta) ||
-          String(producto.codigo || '').toLocaleLowerCase('es').includes(consulta)
-        );
-
-      if (!coincidencias.length) {
-        mostrarEstado(getById('estadoEdicion'), 'No se encontraron productos coincidentes.', 'error');
-        revisarFormularioEdicion();
-        return;
-      }
-      mostrarEstado(getById('estadoEdicion'), coincidencias.length > 1
-        ? 'Hay varios resultados. Selecciona el producto correcto antes de modificarlo.'
-        : 'Selecciona el producto para confirmar que es el correcto.');
-
-      coincidencias.slice(0, 12).forEach(producto => {
-        const boton = document.createElement('button');
-        boton.type = 'button';
-        boton.className = 'edit-match-option';
-        boton.setAttribute('role', 'option');
-        boton.setAttribute('aria-pressed', 'false');
-        boton.textContent = `${producto.codigo} — ${producto.nombre} — ${producto.categoria || 'General'}`;
-        boton.addEventListener('click', () => seleccionarProductoEdicion(producto, boton));
-        contenedor.appendChild(boton);
-      });
-      revisarFormularioEdicion();
-    }
-
-    function seleccionarProductoEdicion(producto, botonSeleccionado) {
-      if (productoEdicionSeleccionado && productoEdicionSeleccionado.fila !== producto.fila) {
-        limpiarImagenesEdicion();
-      }
-      productoEdicionSeleccionado = producto;
-      getById('filaProductoEdicion').value = String(producto.fila || '');
-      getById('marcaEdicion').value = producto.categoria || '';
-      getById('camposEdicion').hidden = false;
-      getById('coincidenciasEdicion').querySelectorAll('.edit-match-option').forEach(boton => {
-        boton.setAttribute('aria-pressed', String(boton === botonSeleccionado));
-      });
-      actualizarEstadoLogoMarca();
-      revisarFormularioEdicion();
-    }
-
     function obtenerUrlLogoMarca(marca) {
       const normalizar = texto => String(texto || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase('es');
       const marcaBuscada = normalizar(marca);
@@ -2098,6 +2017,14 @@
       const entradaLogo = getById('imagenMarcaEdicion');
       entradaLogo.disabled = Boolean(logo);
       entradaLogo.required = !logo;
+      const vistaLogo = getById('vistaLogoExistente');
+      const urlSegura = obtenerUrlSegura(logo);
+      vistaLogo.hidden = !urlSegura;
+      if (urlSegura) {
+        vistaLogo.src = urlSegura;
+      } else {
+        vistaLogo.removeAttribute('src');
+      }
       getById('estadoLogoMarca').textContent = logo
         ? 'El logo de esta marca ya existe y se asociará automáticamente.'
         : 'Aún no hay logo para esta marca; selecciona su imagen para guardarla.';
@@ -2122,12 +2049,19 @@
 
     function revisarFormularioEdicion() {
       if (!getById('marcaEdicion')) return;
+      const codigo = getById('codigoProductoEdicion').value.trim();
+      const descripcion = getById('descripcionProductoEdicion').value.trim();
+      const precio = getById('precioProductoEdicion').value;
+      const precioValido = precio !== '' && Number.isFinite(Number(precio)) && Number(precio) >= 0;
+      const codigoValido = codigo.length > 0 && codigo.length <= 80;
+      const descripcionValida = descripcion.length > 0 && descripcion.length <= 250;
       const marcaValida = getById('marcaEdicion').value.trim().length > 0;
-      const productoValido = Boolean(productoEdicionSeleccionado);
       const imagenValida = getById('imagenProductoEdicion').files.length > 0;
       const logoValido = Boolean(obtenerUrlLogoMarca(getById('marcaEdicion').value)) ||
         getById('imagenMarcaEdicion').files.length > 0;
-      getById('btnGuardarEdicion').disabled = !(marcaValida && productoValido && imagenValida && logoValido);
+      getById('btnGuardarEdicion').disabled = !(
+        codigoValido && descripcionValida && precioValido && marcaValida && imagenValida && logoValido
+      );
     }
 
     function previsualizarImagen(idEntrada, idVista) {
@@ -2175,7 +2109,7 @@
       ['imagenProductoEdicion', 'imagenMarcaEdicion'].forEach(idEntrada => {
         getById(idEntrada).value = '';
       });
-      ['vistaImagenProducto', 'vistaImagenMarca'].forEach(idVista => {
+      ['vistaImagenProducto', 'vistaImagenMarca', 'vistaLogoExistente'].forEach(idVista => {
         const vista = getById(idVista);
         if (vista.dataset.urlObjeto) URL.revokeObjectURL(vista.dataset.urlObjeto);
         delete vista.dataset.urlObjeto;
@@ -2183,24 +2117,26 @@
         vista.removeAttribute('src');
         vista.hidden = true;
       });
+      getById('imagenMarcaEdicion').disabled = false;
+      getById('imagenMarcaEdicion').required = true;
     }
 
     async function guardarCambiosCatalogo(event) {
       event.preventDefault();
       const boton = getById('btnGuardarEdicion');
       revisarFormularioEdicion();
-      if (boton.disabled || !productoEdicionSeleccionado) return;
+      if (boton.disabled) return;
 
       boton.disabled = true;
-      mostrarEstado(getById('estadoEdicion'), 'Guardando imágenes y actualizando Google Sheets…');
+      mostrarEstado(getById('estadoEdicion'), 'Guardando el producto y sus imágenes en Google Sheets…');
       try {
         const archivoProducto = getById('imagenProductoEdicion').files[0];
         const archivoMarca = getById('imagenMarcaEdicion').files[0];
         const carga = {
-          action: 'actualizarProducto',
-          fila: productoEdicionSeleccionado.fila,
-          codigo: productoEdicionSeleccionado.codigo,
-          nombre: productoEdicionSeleccionado.nombre,
+          action: 'crearProducto',
+          codigo: getById('codigoProductoEdicion').value.trim(),
+          nombre: getById('descripcionProductoEdicion').value.trim(),
+          precio: Number(getById('precioProductoEdicion').value),
           marca: getById('marcaEdicion').value.trim(),
           imagenProducto: {
             nombre: archivoProducto.name,
@@ -2230,19 +2166,23 @@
           throw new Error(resultado.mensaje || `El servidor respondió con estado ${respuesta.status}.`);
         }
 
-        catalogo = catalogo.map(producto => producto.fila === resultado.producto.fila
-          ? { ...producto, categoria: resultado.producto.marca, imagen: resultado.producto.imagen, logoMarca: resultado.producto.logoMarca }
-          : producto);
+        catalogo.push({
+          fila: resultado.producto.fila,
+          codigo: resultado.producto.codigo,
+          nombre: resultado.producto.nombre,
+          precio: resultado.producto.precio,
+          categoria: resultado.producto.marca,
+          imagen: resultado.producto.imagen,
+          logoMarca: resultado.producto.logoMarca,
+          disponible: true
+        });
         guardarCatalogoLocal(catalogo);
         filtrarCatalogo();
-        mostrarEstado(getById('estadoEdicion'), 'Catálogo actualizado correctamente.', 'success');
+        mostrarEstado(getById('estadoEdicion'), 'Producto agregado al catálogo correctamente.', 'success');
         getById('formularioEdicion').reset();
         limpiarImagenesEdicion();
-        getById('camposEdicion').hidden = true;
-        getById('coincidenciasEdicion').replaceChildren();
-        productoEdicionSeleccionado = null;
       } catch (err) {
-        console.error('No se pudo actualizar el catálogo:', err);
+        console.error('No se pudo agregar el producto al catálogo:', err);
         mostrarEstado(getById('estadoEdicion'), err.message || 'No se pudo guardar el cambio.', 'error');
       } finally {
         revisarFormularioEdicion();
@@ -2289,9 +2229,6 @@
           if (!lista) {
             throw new Error(datos?.mensaje || 'El servidor devolvió un catálogo con formato inválido.');
           }
-          catalogoRemotoCargado = true;
-          catalogoDatosEdicionDisponibles = lista.length > 0 &&
-            lista.every(producto => Number.isInteger(Number(producto.fila)) && Number(producto.fila) >= 3);
           guardarCatalogoLocal(lista);
           if (!catalogoRenderizado || JSON.stringify(lista) !== JSON.stringify(catalogo)) {
             renderizarCatalogo(lista);
