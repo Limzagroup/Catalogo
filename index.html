@@ -1664,7 +1664,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
   <script>
-    const URL_API_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbz6CAkq2nh-FnyUE6jE4dTmwPbIkFog10jEr4xuJp11-XbqB_mceR5AAiIhuuoIiw8kCg/exec";
+    const URL_API_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbwVvAAODNFh4408zZRaxd89p-rWIjXvBWc5_wH3_ofX0fz4NJUqpHrvFLaIWoLkkoAv/exec";
+    const URL_API_EDICION_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbz6CAkq2nh-FnyUE6jE4dTmwPbIkFog10jEr4xuJp11-XbqB_mceR5AAiIhuuoIiw8kCg/exec";
     const CACHE_CATALOGO_LOCAL_KEY = 'limza-catalogo-v1';
     const CACHE_CATALOGO_LOCAL_MAX_AGE_MS = 60 * 1000;
 
@@ -1959,7 +1960,7 @@
       for (let inicio = 0; inicio < ids.length; inicio += 4) {
         const lote = ids.slice(inicio, inicio + 4);
         const respuesta = await fetch(
-          `${URL_API_APPS_SCRIPT}?action=imagenesPdf&ids=${encodeURIComponent(lote.join(','))}`,
+          `${URL_API_EDICION_APPS_SCRIPT}?action=imagenesPdf&ids=${encodeURIComponent(lote.join(','))}`,
           { cache: 'no-store' }
         );
         if (!respuesta.ok) throw new Error(`No se pudieron cargar las imágenes del catálogo (HTTP ${respuesta.status}).`);
@@ -2123,7 +2124,7 @@
 
           try {
             const dataUrl = await leerArchivoComoDataUrl(archivo);
-            const respuesta = await fetch(URL_API_APPS_SCRIPT, {
+            const respuesta = await fetch(URL_API_EDICION_APPS_SCRIPT, {
               method: 'POST',
               headers: { 'Content-Type': 'text/plain;charset=utf-8', 'Accept': 'application/json' },
               body: JSON.stringify({
@@ -2192,7 +2193,7 @@
 
     async function cargarLogosMarcas() {
       try {
-        const respuesta = await fetch(`${URL_API_APPS_SCRIPT}?action=logos`, { cache: 'no-store' });
+        const respuesta = await fetch(`${URL_API_EDICION_APPS_SCRIPT}?action=logos`, { cache: 'no-store' });
         if (!respuesta.ok) throw new Error(`HTTP ${respuesta.status}`);
         const logos = await respuesta.json();
         if (!logos || Array.isArray(logos) || typeof logos !== 'object') {
@@ -2366,7 +2367,7 @@
           };
         }
 
-        const respuesta = await fetch(URL_API_APPS_SCRIPT, {
+        const respuesta = await fetch(URL_API_EDICION_APPS_SCRIPT, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8', 'Accept': 'application/json' },
           body: JSON.stringify(carga)
