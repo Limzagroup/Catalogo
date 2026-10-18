@@ -1533,6 +1533,10 @@
           <i class="bi bi-pencil-square" aria-hidden="true"></i>
           <span>Agregar producto</span>
         </button>
+        <button id="btnAbrirCargaMasiva" type="button">
+          <i class="bi bi-images" aria-hidden="true"></i>
+          <span>Carga masiva de imágenes</span>
+        </button>
       </nav>
     </div>
   </nav>
@@ -1625,6 +1629,29 @@
     </form>
   </dialog>
 
+  <dialog id="dialogoCargaMasiva" class="app-dialog" aria-labelledby="tituloCargaMasiva">
+    <form id="formularioCargaMasiva" novalidate>
+      <div class="app-dialog-header">
+        <h2 id="tituloCargaMasiva">Carga masiva de imágenes</h2>
+        <button id="btnCerrarCargaMasiva" class="btn-close btn-close-white" type="button" aria-label="Cerrar"></button>
+      </div>
+      <div class="app-dialog-body">
+        <p class="text-muted small">Selecciona imágenes JPG, PNG o WEBP. El nombre del archivo, sin extensión, debe coincidir exactamente con el código del producto (por ejemplo, <strong>ABC-123.jpg</strong>). Máximo 3 MB por archivo.</p>
+        <p class="text-muted small">Las imágenes se cargan una por una. Si un producto ya tiene imagen, se conserva y el archivo se reporta como omitido.</p>
+        <label for="archivosImagenesMasivas" class="form-label">Archivos de imagen</label>
+        <input id="archivosImagenesMasivas" class="form-control" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" multiple>
+        <div id="estadoCargaMasiva" class="small mt-3" role="status" aria-live="polite"></div>
+        <ul id="resultadosCargaMasiva" class="list-group list-group-flush mt-2" aria-label="Resultado por archivo"></ul>
+      </div>
+      <div class="app-dialog-footer">
+        <button id="btnCancelarCargaMasiva" class="btn btn-outline-primary" type="button">Cerrar</button>
+        <button id="btnIniciarCargaMasiva" class="btn btn-primary" type="button" disabled>
+          <i class="bi bi-cloud-arrow-up me-2" aria-hidden="true"></i>Subir imágenes
+        </button>
+      </div>
+    </form>
+  </dialog>
+
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
   <script>
     const URL_API_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbz6CAkq2nh-FnyUE6jE4dTmwPbIkFog10jEr4xuJp11-XbqB_mceR5AAiIhuuoIiw8kCg/exec";
@@ -1647,8 +1674,16 @@
       getById('btnAbrirPdf').addEventListener('click', abrirDialogoPdf);
       getById('btnGenerarPdf').addEventListener('click', generarCatalogoPdf);
       getById('btnAbrirEdicion').addEventListener('click', abrirDialogoEdicion);
+      getById('btnAbrirCargaMasiva').addEventListener('click', abrirDialogoCargaMasiva);
       getById('btnCerrarEdicion').addEventListener('click', cerrarDialogoEdicion);
       getById('btnCancelarEdicion').addEventListener('click', cerrarDialogoEdicion);
+      getById('btnCerrarCargaMasiva').addEventListener('click', cerrarDialogoCargaMasiva);
+      getById('btnCancelarCargaMasiva').addEventListener('click', cerrarDialogoCargaMasiva);
+      getById('archivosImagenesMasivas').addEventListener('change', prepararCargaMasiva);
+      getById('btnIniciarCargaMasiva').addEventListener('click', subirImagenesMasivas);
+      getById('dialogoCargaMasiva').addEventListener('cancel', event => {
+        if (cargaMasivaEnCurso) event.preventDefault();
+      });
       getById('marcaEdicion').addEventListener('input', manejarCambioMarcaEdicion);
       ['codigoProductoEdicion', 'descripcionProductoEdicion', 'precioProductoEdicion'].forEach(id => {
         getById(id).addEventListener('input', revisarFormularioEdicion);
@@ -1972,6 +2007,160 @@
       limpiarImagenesEdicion();
       mostrarEstado(getById('estadoEdicion'), '');
       revisarFormularioEdicion();
+    }
+
+    function abrirDialogoCargaMasiva() {
+      cerrarMenu();
+      getById('dialogoCargaMasiva').showModal();
+      getById('archivosImagenesMasivas').focus();
+    }
+
+    function cerrarDialogoCargaMasiva() {
+      if (cargaMasivaEnCurso) return;
+      getById('dialogoCargaMasiva').close();
+      getById('archivosImagenesMasivas').value = '';
+      getById('resultadosCargaMasiva').replaceChildren();
+      mostrarEstado(getById('estadoCargaMasiva'), '');
+      getById('btnIniciarCargaMasiva').disabled = true;
+    }
+
+    let cargaMasivaEnCurso = false;
+
+    function prepararCargaMasiva() {
+      const archivos = Array.from(getById('archivosImagenesMasivas').files || []);
+      const resultados = getById('resultadosCargaMasiva');
+      resultados.replaceChildren();
+      getById('btnIniciarCargaMasiva').disabled = true;
+      if (!archivos.length) {
+        mostrarEstado(getById('estadoCargaMasiva'), '');
+        return;
+      }
+
+      const codigosSeleccionados = new Set();
+      let validos = 0;
+      archivos.forEach(archivo => {
+        const base = archivo.name.replace(/\.[^.]+$/, '').trim();
+        const extensionValida = /\.(jpe?g|png|webp)$/i.test(archivo.name);
+        const tipoValido = ['image/jpeg', 'image/png', 'image/webp'].includes(archivo.type);
+        let mensaje = 'Listo para subir';
+        let valido = true;
+        if (!extensionValida || !tipoValido) {
+          mensaje = 'Formato no compatible (usa JPG, PNG o WEBP)';
+          valido = false;
+        } else if (archivo.size > 3 * 1024 * 1024) {
+          mensaje = 'Supera el máximo de 3 MB';
+          valido = false;
+        } else if (!base || base.length > 80) {
+          mensaje = 'El código del archivo está vacío o supera 80 caracteres';
+          valido = false;
+        } else if (codigosSeleccionados.has(base.toLocaleLowerCase('es'))) {
+          mensaje = 'Código repetido entre los archivos seleccionados';
+          valido = false;
+        } else {
+          codigosSeleccionados.add(base.toLocaleLowerCase('es'));
+        }
+        if (valido) validos += 1;
+
+        const elemento = document.createElement('li');
+        elemento.className = 'list-group-item bg-transparent d-flex justify-content-between gap-3 px-0';
+        const nombre = document.createElement('span');
+        nombre.textContent = archivo.name;
+        const estado = document.createElement('span');
+        estado.dataset.valid = String(valido);
+        estado.className = valido ? 'text-muted text-end' : 'text-danger text-end';
+        estado.textContent = mensaje;
+        elemento.append(nombre, estado);
+        resultados.appendChild(elemento);
+      });
+
+      mostrarEstado(getById('estadoCargaMasiva'), `${validos} de ${archivos.length} archivos listos para subir.`);
+      getById('btnIniciarCargaMasiva').disabled = validos === 0;
+    }
+
+    async function subirImagenesMasivas() {
+      if (cargaMasivaEnCurso) return;
+      const archivos = Array.from(getById('archivosImagenesMasivas').files || []);
+      const filas = Array.from(getById('resultadosCargaMasiva').children);
+      const tareas = archivos.map((archivo, indice) => {
+        const codigo = archivo.name.replace(/\.[^.]+$/, '').trim();
+        const valido = filas[indice]?.lastElementChild?.dataset.valid === 'true';
+        return { archivo, codigo, fila: filas[indice], valido };
+      }).filter(tarea => tarea.valido);
+      if (!tareas.length) return;
+
+      cargaMasivaEnCurso = true;
+      getById('archivosImagenesMasivas').disabled = true;
+      getById('btnIniciarCargaMasiva').disabled = true;
+      getById('btnCerrarCargaMasiva').disabled = true;
+      getById('btnCancelarCargaMasiva').disabled = true;
+      let subidas = 0;
+      let omitidas = 0;
+      let errores = 0;
+
+      try {
+        for (let indice = 0; indice < tareas.length; indice += 1) {
+          const { archivo, codigo, fila } = tareas[indice];
+          const estadoFila = fila.lastElementChild;
+          estadoFila.className = 'text-primary text-end';
+          estadoFila.textContent = 'Subiendo…';
+          mostrarEstado(getById('estadoCargaMasiva'), `Procesando ${indice + 1} de ${tareas.length}: ${archivo.name}`);
+
+          try {
+            const dataUrl = await leerArchivoComoDataUrl(archivo);
+            const respuesta = await fetch(URL_API_APPS_SCRIPT, {
+              method: 'POST',
+              headers: { 'Content-Type': 'text/plain;charset=utf-8', 'Accept': 'application/json' },
+              body: JSON.stringify({
+                action: 'subirImagenProducto',
+                codigo,
+                imagenProducto: { nombre: archivo.name, dataUrl }
+              })
+            });
+            const texto = await respuesta.text();
+            let resultado;
+            try {
+              resultado = JSON.parse(texto);
+            } catch (error) {
+              throw new Error('El servidor no devolvió JSON válido. Comprueba que code.js esté publicado.');
+            }
+            if (!respuesta.ok || !resultado.exito) {
+              throw new Error(resultado.mensaje || `El servidor respondió con estado ${respuesta.status}.`);
+            }
+
+            if (resultado.producto.estado === 'omitida') {
+              omitidas += 1;
+              estadoFila.className = 'text-warning text-end';
+              estadoFila.textContent = resultado.producto.mensaje;
+            } else {
+              subidas += 1;
+              estadoFila.className = 'text-success text-end';
+              estadoFila.textContent = 'Imagen guardada';
+              const codigoNormalizado = codigo.toLocaleLowerCase('es');
+              catalogo = catalogo.map(producto =>
+                String(producto.codigo || '').trim().toLocaleLowerCase('es') === codigoNormalizado
+                  ? { ...producto, fila: resultado.producto.fila, imagen: resultado.producto.imagen }
+                  : producto
+              );
+              guardarCatalogoLocal(catalogo);
+            }
+          } catch (error) {
+            errores += 1;
+            estadoFila.className = 'text-danger text-end';
+            estadoFila.textContent = error.message || 'No se pudo guardar esta imagen.';
+          }
+        }
+      } finally {
+        cargaMasivaEnCurso = false;
+        getById('archivosImagenesMasivas').disabled = false;
+        getById('btnCerrarCargaMasiva').disabled = false;
+        getById('btnCancelarCargaMasiva').disabled = false;
+        getById('btnIniciarCargaMasiva').disabled = true;
+        if (subidas) filtrarCatalogo();
+        mostrarEstado(
+          getById('estadoCargaMasiva'),
+          `Proceso terminado: ${subidas} subidas, ${omitidas} omitidas y ${errores} con error.`
+        );
+      }
     }
 
     async function cargarLogosMarcas() {
@@ -2351,7 +2540,7 @@
         const imagenProducto = obtenerUrlSegura(prod.imagen);
         const imagenMarca = obtenerUrlSegura(prod.logoMarca);
         const col = document.createElement('div');
-        col.className = 'col-12 col-md-6';
+        col.className = 'col-12 col-md-6 col-xl-4';
 
         col.innerHTML = `
           <div class="card card-product p-3 mb-1 ${clasesExtras}">
