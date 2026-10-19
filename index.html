@@ -1229,13 +1229,6 @@
       background: #fff;
       object-fit: contain;
     }
-    .brand-logo {
-      width: 24px;
-      height: 24px;
-      margin-right: 6px;
-      object-fit: contain;
-      vertical-align: middle;
-    }
     .bulk-upload-progress {
       width: 100%;
       height: 12px;
@@ -1845,17 +1838,26 @@
           for (let posicionPagina = 0; posicionPagina < productosPorPagina; posicionPagina += 1) {
             const producto = productosPagina[posicionPagina] || null;
             const idImagen = producto ? extraerIdImagenDrive(producto.imagen) : '';
+            const idLogoMarca = producto ? extraerIdImagenDrive(producto.logoMarca) : '';
             const imagenDataUrl = idImagen ? imagenesPagina[idImagen] : null;
+            const logoMarcaDataUrl = idLogoMarca ? imagenesPagina[idLogoMarca] : null;
             let imagen = idImagen ? imagenesIncrustadas.get(idImagen) : null;
             if (!imagen && imagenDataUrl) {
               imagen = await documento.embedJpg(imagenDataUrl);
               comprobarGeneracionPdf(generacion);
               imagenesIncrustadas.set(idImagen, imagen);
             }
+            let logoMarca = idLogoMarca ? imagenesIncrustadas.get(idLogoMarca) : null;
+            if (!logoMarca && logoMarcaDataUrl) {
+              logoMarca = await documento.embedJpg(logoMarcaDataUrl);
+              comprobarGeneracionPdf(generacion);
+              imagenesIncrustadas.set(idLogoMarca, logoMarca);
+            }
             dibujarProductoPlantillaPdf(
               pagina,
               producto,
               imagen,
+              logoMarca,
               posicionPagina,
               altoPagina,
               { titulo: fuenteTitulo, codigo: fuenteCodigo, precio: fuentePrecio },
@@ -1919,6 +1921,7 @@
       pagina,
       producto,
       imagen,
+      logoMarca,
       posicionPagina,
       altoPagina,
       fuentes,
@@ -1956,6 +1959,25 @@
           y: cajaImagen.y + (cajaImagen.height - altoImagen) / 2,
           width: anchoImagen,
           height: altoImagen
+        });
+      }
+      if (logoMarca) {
+        const margenInferior = 4.3524;
+        const margenLateral = 6.055;
+        const cajaLogo = {
+          x: x + margenLateral,
+          y: yInferiorTarjeta + margenInferior,
+          width: 42,
+          height: 14
+        };
+        const escalaLogo = Math.min(cajaLogo.width / logoMarca.width, cajaLogo.height / logoMarca.height);
+        const anchoLogo = logoMarca.width * escalaLogo;
+        const altoLogo = logoMarca.height * escalaLogo;
+        pagina.drawImage(logoMarca, {
+          x: cajaLogo.x,
+          y: cajaLogo.y,
+          width: anchoLogo,
+          height: altoLogo
         });
       }
       if (producto) {
@@ -2043,7 +2065,10 @@
       getById('textoProgresoPdf').textContent = `${porcentajeExacto}% · ${mensaje}`;
     }
     async function cargarImagenesPdf(productos, signal, actualizarProgreso = () => {}) {
-      const ids = [...new Set(productos.map(producto => extraerIdImagenDrive(producto.imagen)).filter(Boolean))];
+      const ids = [...new Set(productos.flatMap(producto => [
+        extraerIdImagenDrive(producto.imagen),
+        extraerIdImagenDrive(producto.logoMarca)
+      ]).filter(Boolean))];
       const imagenesDataUrl = {};
       const lotes = [];
       for (let inicio = 0; inicio < ids.length; inicio += 4) {
@@ -2745,7 +2770,6 @@
           ? ''
           : '<span class="badge bg-secondary">No disponible</span>';
         const imagenProducto = obtenerUrlSegura(prod.imagen);
-        const imagenMarca = obtenerUrlSegura(prod.logoMarca);
         const col = document.createElement('div');
         col.className = 'col-12 col-md-6 col-xl-4';
         col.innerHTML = `
@@ -2755,7 +2779,6 @@
               : '<div class="product-photo d-flex align-items-center justify-content-center text-muted"><i class="bi bi-image fs-1" aria-hidden="true"></i></div>'}
             <div class="d-flex justify-content-between align-items-start mb-2">
               <span class="badge badge-cat" aria-label="Marca: ${escaparHtml(prod.categoria)}">
-                ${imagenMarca ? `<img class="brand-logo" src="${escaparHtml(imagenMarca)}" alt="" loading="lazy">` : ''}
                 ${escaparHtml(prod.categoria)}
               </span>
               <span class="text-muted small fw-semibold">${escaparHtml(prod.codigo)}</span>
