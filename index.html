@@ -2107,7 +2107,7 @@
     }
 
     async function cargarPlantillaCatalogoPdf() {
-      const respuesta = await fetch(new URL('Plantilla002.pdf', window.location.href), { cache: 'force-cache' });
+      const respuesta = await fetch('https://raw.githubusercontent.com/Limzagroup/Catalogo/main/Plantilla002.pdf', { cache: 'force-cache' });
       if (!respuesta.ok) throw new Error('No se pudo cargar la plantilla del PDF.');
       return new Uint8Array(await respuesta.arrayBuffer());
     }
