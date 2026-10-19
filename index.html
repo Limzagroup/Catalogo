@@ -1690,7 +1690,7 @@
     </form>
   </dialog>
 
-  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
   <script src="https://accounts.google.com/gsi/client" defer></script>
   <script>
     const URL_API_EDICION_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbz6CAkq2nh-FnyUE6jE4dTmwPbIkFog10jEr4xuJp11-XbqB_mceR5AAiIhuuoIiw8kCg/exec";
@@ -1991,7 +1991,7 @@
     }
 
     async function generarCatalogoPdf() {
-      if (!catalogoRenderizado || !window.jspdf?.jsPDF) {
+      if (!catalogoRenderizado || !window.PDFLib?.PDFDocument) {
         mostrarEstado(getById('estadoPdf'), 'No se pudo cargar el catálogo o el generador de PDF. Recarga la página e inténtalo de nuevo.', 'error');
         return;
       }
@@ -2015,25 +2015,19 @@
       actualizarProgresoPdf(0, 'Preparando productos e imágenes…');
       mostrarEstado(getById('estadoPdf'), 'Preparando productos e imágenes para el PDF…');
       try {
-        const { jsPDF } = window.jspdf;
-        const escalaPxAMm = 25.4 / 96;
-        const escalaReferenciaAMm = (634 * escalaPxAMm) / 768;
-        const anchoPagina = 634 * escalaPxAMm;
-        const altoPagina = 1600 * escalaReferenciaAMm;
-        const anchoTarjeta = 165.9996 * escalaPxAMm;
-        const altoTarjeta = 202.7756 * escalaPxAMm;
-        const logoEncabezado = await cargarLogoEncabezadoPdf();
-        const pdf = new jsPDF({
-          orientation: 'portrait',
-          unit: 'mm',
-          format: [anchoPagina, altoPagina]
-        });
+        const { PDFDocument, StandardFonts, rgb } = window.PDFLib;
+        const bytesPlantilla = await cargarPlantillaCatalogoPdf();
+        const documento = await PDFDocument.create();
+        const [fondoPlantilla] = await documento.embedPdf(bytesPlantilla, [0]);
+        const { width: anchoPagina, height: altoPagina } = fondoPlantilla;
+        const fuenteTitulo = await documento.embedFont(StandardFonts.HelveticaBold);
+        const fuenteCodigo = await documento.embedFont(StandardFonts.HelveticaBoldOblique);
+        const fuentePrecio = await documento.embedFont(StandardFonts.HelveticaBold);
+        const colorTexto = rgb(60 / 255, 60 / 255, 59 / 255);
+        const colorBlanco = rgb(1, 1, 1);
+        const imagenesIncrustadas = new Map();
         const columnas = 3;
         const filas = 5;
-        const separacionX = 20 * escalaReferenciaAMm;
-        const separacionY = 21 * escalaReferenciaAMm;
-        const inicioTarjetasX = 61 * escalaReferenciaAMm;
-        const inicioTarjetasY = 196 * escalaReferenciaAMm;
         const productosPorPagina = columnas * filas;
         const totalPaginas = Math.ceil(productos.length / productosPorPagina);
 
@@ -2046,107 +2040,35 @@
             `Armando PDF: preparando página ${indicePagina + 1} de ${totalPaginas}…`
           );
 
-          if (indicePagina > 0) pdf.addPage();
-          dibujarEncabezadoPdf(pdf, logoEncabezado, anchoPagina);
-          pdf.setFillColor(247, 247, 247);
-          pdf.roundedRect(
-            34 * escalaReferenciaAMm,
-            177 * escalaReferenciaAMm,
-            700 * escalaReferenciaAMm,
-            1351 * escalaReferenciaAMm,
-            4,
-            4,
-            'F'
-          );
-          productosPagina.forEach((producto, posicionPagina) => {
-            const fila = Math.floor(posicionPagina / columnas);
-            const columna = posicionPagina % columnas;
-            const x = inicioTarjetasX + columna * (anchoTarjeta + separacionX);
-            const y = inicioTarjetasY + fila * (altoTarjeta + separacionY);
-            pdf.setDrawColor(185, 185, 185);
-            pdf.setLineWidth(0.55);
-            pdf.setFillColor(255, 255, 255);
-            pdf.roundedRect(x, y, anchoTarjeta, altoTarjeta, 2.5, 2.5, 'FD');
-            const idImagen = extraerIdImagenDrive(producto.imagen);
-            const imagen = imagenesPagina[idImagen];
-            pdf.setFont('helvetica', 'bold');
-            pdf.setFontSize(7.8);
-            pdf.setTextColor(65, 65, 65);
-            const nombre = pdf.splitTextToSize(String(producto.nombre || '').toLocaleUpperCase('es'), anchoTarjeta - 6).slice(0, 2);
-            pdf.text(nombre, x + anchoTarjeta / 2, y + 6.5, { align: 'center', lineHeightFactor: 1.05 });
-            if (imagen) {
-              const cajaImagen = {
-                x: x + 5.5,
-                y: y + 12,
-                width: anchoTarjeta - 11,
-                height: altoTarjeta - 26
-              };
-              const dimensionesImagen = pdf.getImageProperties(imagen);
-              const escalaImagen = Math.min(
-                cajaImagen.width / dimensionesImagen.width,
-                cajaImagen.height / dimensionesImagen.height
-              );
-              const anchoImagen = dimensionesImagen.width * escalaImagen;
-              const altoImagen = dimensionesImagen.height * escalaImagen;
-              pdf.addImage(
-                imagen,
-                'JPEG',
-                cajaImagen.x + (cajaImagen.width - anchoImagen) / 2,
-                cajaImagen.y + (cajaImagen.height - altoImagen) / 2,
-                anchoImagen,
-                altoImagen,
-                undefined,
-                'FAST'
-              );
+          const pagina = documento.addPage([anchoPagina, altoPagina]);
+          pagina.drawPage(fondoPlantilla, { x: 0, y: 0, width: anchoPagina, height: altoPagina });
+          for (let posicionPagina = 0; posicionPagina < productosPorPagina; posicionPagina += 1) {
+            const producto = productosPagina[posicionPagina] || null;
+            const idImagen = producto ? extraerIdImagenDrive(producto.imagen) : '';
+            const imagenDataUrl = idImagen ? imagenesPagina[idImagen] : null;
+            let imagen = idImagen ? imagenesIncrustadas.get(idImagen) : null;
+            if (!imagen && imagenDataUrl) {
+              imagen = await documento.embedJpg(imagenDataUrl);
+              imagenesIncrustadas.set(idImagen, imagen);
             }
-            pdf.setFont('helvetica', 'bolditalic');
-            pdf.setFontSize(7.4);
-            pdf.setTextColor(75, 75, 75);
-            pdf.text(`COD: ${producto.codigo || 'N/A'}`, x + anchoTarjeta - 3, y + altoTarjeta - 10.7, { align: 'right' });
-
-            const centroLogoX = x + 10;
-            const centroLogoY = y + altoTarjeta - 7.4;
-            pdf.setDrawColor(0, 0, 0);
-            pdf.setLineWidth(1);
-            pdf.circle(centroLogoX, centroLogoY, 5.5, 'S');
-            pdf.setLineWidth(0.45);
-            pdf.line(x + 2.5, centroLogoY + 3.6, centroLogoX - 5.8, centroLogoY + 3.6);
-            pdf.line(centroLogoX + 5.8, centroLogoY + 3.6, centroLogoX + 11.5, centroLogoY + 3.6);
-
-            const precioFormato = Number(producto.precio || 0).toFixed(2).replace('.', ',');
-            const textoPrecio = `PV: $${precioFormato}`;
-            pdf.setFont('helvetica', 'bold');
-            pdf.setFontSize(8.3);
-            const anchoPrecio = Math.min(anchoTarjeta - 18, Math.max(23, pdf.getTextWidth(textoPrecio) + 6));
-            const altoPrecio = 7.2;
-            const xPrecio = x + anchoTarjeta - anchoPrecio;
-            const yPrecio = y + altoTarjeta - altoPrecio - 0.8;
-            const corteDiagonal = 5.5;
-            pdf.setFillColor(...(producto.disponible ? [246, 126, 48] : [110, 110, 110]));
-            pdf.triangle(
-              xPrecio,
-              yPrecio + altoPrecio,
-              xPrecio + corteDiagonal,
-              yPrecio,
-              xPrecio + corteDiagonal,
-              yPrecio + altoPrecio,
-              'F'
+            dibujarProductoPlantillaPdf(
+              pagina,
+              producto,
+              imagen,
+              posicionPagina,
+              altoPagina,
+              { titulo: fuenteTitulo, codigo: fuenteCodigo, precio: fuentePrecio },
+              colorTexto,
+              colorBlanco
             );
-            pdf.rect(xPrecio + corteDiagonal, yPrecio, anchoPrecio - corteDiagonal, altoPrecio, 'F');
-            pdf.setDrawColor(35, 35, 35);
-            pdf.setLineWidth(0.8);
-            pdf.line(xPrecio, yPrecio + altoPrecio, xPrecio + corteDiagonal, yPrecio);
-            pdf.line(xPrecio + corteDiagonal, yPrecio, x + anchoTarjeta, yPrecio);
-            pdf.line(x + anchoTarjeta, yPrecio, x + anchoTarjeta, yPrecio + altoPrecio);
-            pdf.line(x + anchoTarjeta, yPrecio + altoPrecio, xPrecio, yPrecio + altoPrecio);
-            pdf.setTextColor(255, 255, 255);
-            pdf.text(textoPrecio, xPrecio + anchoPrecio / 2 + 1.4, yPrecio + 4.9, { align: 'center' });
-            if (!producto.disponible) {
-              pdf.setFontSize(5.4);
-              pdf.setTextColor(90, 90, 90);
-              pdf.text('NO DISPONIBLE', x + 3, y + altoTarjeta - 1.5);
-            }
-          });
+          }
+          dibujarNumeroPaginaPlantillaPdf(
+            pagina,
+            indicePagina + 2,
+            altoPagina,
+            fuenteTitulo,
+            colorTexto
+          );
 
           actualizarProgresoPdf(
             Math.round(((indicePagina + 1) / totalPaginas) * 95),
@@ -2155,20 +2077,20 @@
           await new Promise(resolve => requestAnimationFrame(resolve));
         }
 
-        const paginas = pdf.getNumberOfPages();
-        for (let pagina = 1; pagina <= paginas; pagina += 1) {
-          pdf.setPage(pagina);
-          dibujarPiePaginaPdf(pdf, anchoPagina, altoPagina, pagina);
-        }
-
         const nombreArchivo = filtrarPorMarca
           ? `catalogo-limza-${marcasElegidas.map(nombre => nombre.toLowerCase().replace(/[^a-z0-9]+/g, '-')).join('-')}.pdf`
           : 'catalogo-limza-completo.pdf';
-        pdf.save(nombreArchivo);
+        const salida = await documento.save();
+        const urlDescarga = URL.createObjectURL(new Blob([salida], { type: 'application/pdf' }));
+        const enlaceDescarga = document.createElement('a');
+        enlaceDescarga.href = urlDescarga;
+        enlaceDescarga.download = nombreArchivo;
+        enlaceDescarga.click();
+        setTimeout(() => URL.revokeObjectURL(urlDescarga), 1000);
         actualizarProgresoPdf(100, 'PDF generado.');
         mostrarEstado(getById('estadoPdf'), 'PDF generado y descargado.', 'success');
       } catch (err) {
-        console.error('No se pudo generar el catálogo PDF.');
+        console.error('No se pudo generar el catálogo PDF.', err);
         actualizarProgresoPdf(
           Number(getById('progresoPdf').value),
           'No se pudo completar la generación.'
@@ -2184,114 +2106,128 @@
       return coincidencia ? coincidencia[1] : '';
     }
 
-    async function cargarLogoEncabezadoPdf() {
-      const respuesta = await fetch(new URL('LOGO_LIMZAGROUP_BLACK.png', window.location.href), { cache: 'force-cache' });
-      if (!respuesta.ok) throw new Error('No se pudo cargar el logo del encabezado del PDF.');
-      return leerArchivoComoDataUrl(await respuesta.blob());
+    async function cargarPlantillaCatalogoPdf() {
+      const respuesta = await fetch(new URL('Plantilla002.pdf', window.location.href), { cache: 'force-cache' });
+      if (!respuesta.ok) throw new Error('No se pudo cargar la plantilla del PDF.');
+      return new Uint8Array(await respuesta.arrayBuffer());
     }
 
-    function dibujarEncabezadoPdf(pdf, logoDataUrl, anchoPagina) {
-      const altoEncabezado = 38.7;
-      pdf.setFillColor(246, 126, 48);
-      pdf.rect(0, 0, anchoPagina, altoEncabezado, 'F');
-      pdf.setFillColor(255, 255, 255);
-      pdf.rect(14, 8.6, anchoPagina - 29, 29.2, 'F');
-      pdf.triangle(14, 8.6, 14, 37.8, 4, 37.8, 'F');
-      pdf.triangle(anchoPagina - 15, 8.6, anchoPagina - 15, 37.8, anchoPagina - 26, 37.8, 'F');
+    function dibujarProductoPlantillaPdf(
+      pagina,
+      producto,
+      imagen,
+      posicionPagina,
+      altoPagina,
+      fuentes,
+      colorTexto,
+      colorBlanco
+    ) {
+      const columnas = 3;
+      const anchoTarjeta = 166.08075;
+      const altoTarjeta = 202.87477;
+      const iniciosX = [50.8413, 233.66194, 416.4851];
+      const iniciosYDesdeArriba = [162.22082, 381.83548, 601.45014, 821.0648, 1040.67946];
+      const fila = Math.floor(posicionPagina / columnas);
+      const columna = posicionPagina % columnas;
+      const x = iniciosX[columna];
+      const yDesdeArriba = iniciosYDesdeArriba[fila];
+      const yInferiorTarjeta = altoPagina - yDesdeArriba - altoTarjeta;
 
-      pdf.setDrawColor(64, 64, 64);
-      pdf.setLineWidth(1.2);
-      pdf.line(14, 8.6, anchoPagina - 15, 8.6);
-      pdf.line(anchoPagina - 15, 8.6, anchoPagina - 26, 37.8);
-      pdf.setDrawColor(246, 126, 48);
-      pdf.line(14, 8.6, 4, 37.8);
+      if (imagen) {
+        const cajaImagen = { x: x + 10, y: yInferiorTarjeta + 32, width: anchoTarjeta - 20, height: 136 };
+        const escalaImagen = Math.min(cajaImagen.width / imagen.width, cajaImagen.height / imagen.height);
+        const anchoImagen = imagen.width * escalaImagen;
+        const altoImagen = imagen.height * escalaImagen;
+        pagina.drawImage(imagen, {
+          x: cajaImagen.x + (cajaImagen.width - anchoImagen) / 2,
+          y: cajaImagen.y + (cajaImagen.height - altoImagen) / 2,
+          width: anchoImagen,
+          height: altoImagen
+        });
+      }
 
-      pdf.setTextColor(143, 143, 143);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(13);
-      pdf.text('MAYOR DE MARCAS', 22, 16.4);
+      if (producto) {
+        const lineasTitulo = envolverTextoCatalogoPdf(
+          String(producto.nombre || '').toLocaleUpperCase('es'),
+          fuentes.titulo,
+          10,
+          anchoTarjeta - 8,
+          2
+        );
+        const baseTitulo = altoPagina - yDesdeArriba - 16.647;
+        lineasTitulo.forEach((linea, indice) => {
+          const anchoLinea = fuentes.titulo.widthOfTextAtSize(linea, 10);
+          pagina.drawText(linea, {
+            x: x + (anchoTarjeta - anchoLinea) / 2,
+            y: baseTitulo - indice * 11,
+            size: 10,
+            font: fuentes.titulo,
+            color: colorTexto
+          });
+        });
 
-      pdf.setFillColor(246, 126, 48);
-      pdf.roundedRect(18.7, 21.2, 4.3, 3.1, 0.4, 0.4, 'F');
-      pdf.setDrawColor(255, 255, 255);
-      pdf.setLineWidth(0.35);
-      pdf.line(19, 21.5, 20.85, 23);
-      pdf.line(22.7, 21.5, 20.85, 23);
-      pdf.setTextColor(85, 85, 85);
-      pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(8.2);
-      pdf.text('limzaca@gmail.com', 25, 23.8);
+        const textoCodigo = `COD: ${producto.codigo || 'N/A'}`;
+        let tamanoCodigo = 9;
+        while (fuentes.codigo.widthOfTextAtSize(textoCodigo, tamanoCodigo) > 66 && tamanoCodigo > 6) {
+          tamanoCodigo -= 0.5;
+        }
+        const anchoCodigo = fuentes.codigo.widthOfTextAtSize(textoCodigo, tamanoCodigo);
+        pagina.drawText(textoCodigo, {
+          x: x + 160.08 - anchoCodigo,
+          y: yInferiorTarjeta + 21.3556,
+          size: tamanoCodigo,
+          font: fuentes.codigo,
+          color: colorTexto
+        });
 
-      pdf.setDrawColor(246, 126, 48);
-      pdf.setLineWidth(1.5);
-      pdf.line(19.2, 27.1, 20.2, 28.2);
-      pdf.line(20.2, 28.2, 19.6, 29.3);
-      pdf.line(19.6, 29.3, 21.1, 31);
-      pdf.line(21.1, 31, 22.2, 30.3);
-      pdf.setTextColor(85, 85, 85);
-      pdf.setFontSize(8.2);
-      pdf.text('+58 414-423 8533', 25, 30.7);
-
-      pdf.setFillColor(246, 126, 48);
-      pdf.triangle(75, 33.5, 82, 33.5, 78.5, 39, 'F');
-      pdf.setFillColor(91, 91, 91);
-      pdf.triangle(83, 33.5, 90, 33.5, 86.5, 39, 'F');
-      pdf.triangle(91, 33.5, 98, 33.5, 94.5, 39, 'F');
-
-      const dimensionesLogo = pdf.getImageProperties(logoDataUrl);
-      const cajaLogo = { x: anchoPagina - 66, y: 12.1, width: 49, height: 20 };
-      const escalaLogo = Math.min(
-        cajaLogo.width / dimensionesLogo.width,
-        cajaLogo.height / dimensionesLogo.height
-      );
-      const anchoLogo = dimensionesLogo.width * escalaLogo;
-      const altoLogo = dimensionesLogo.height * escalaLogo;
-      pdf.addImage(
-        logoDataUrl,
-        'PNG',
-        cajaLogo.x + (cajaLogo.width - anchoLogo) / 2,
-        cajaLogo.y + (cajaLogo.height - altoLogo) / 2,
-        anchoLogo,
-        altoLogo,
-        undefined,
-        'FAST'
-      );
+        const precio = `PV: $${Number(producto.precio || 0).toFixed(2).replace('.', ',')}`;
+        let tamanoPrecio = 15;
+        while (fuentes.precio.widthOfTextAtSize(precio, tamanoPrecio) > 66 && tamanoPrecio > 9) {
+          tamanoPrecio -= 0.5;
+        }
+        const anchoPrecio = fuentes.precio.widthOfTextAtSize(precio, tamanoPrecio);
+        pagina.drawText(precio, {
+          x: x + 133.025 - anchoPrecio / 2,
+          y: yInferiorTarjeta + 4.3524,
+          size: tamanoPrecio,
+          font: fuentes.precio,
+          color: colorBlanco
+        });
+      }
     }
 
-    function dibujarPiePaginaPdf(pdf, anchoPagina, altoPagina, numeroPagina) {
-      const escalaReferenciaAMm = anchoPagina / 768;
-      const altoPie = 45 * escalaReferenciaAMm;
-      const y = altoPagina - altoPie;
-      pdf.setFillColor(64, 64, 64);
-      pdf.rect(0, y, anchoPagina, altoPie, 'F');
-      pdf.setFillColor(246, 126, 48);
-      pdf.rect(0, y, 274 * escalaReferenciaAMm, altoPie, 'F');
-      pdf.triangle(
-        274 * escalaReferenciaAMm,
-        y,
-        290 * escalaReferenciaAMm,
-        y,
-        260 * escalaReferenciaAMm,
-        altoPagina,
-        'F'
-      );
+    function envolverTextoCatalogoPdf(texto, fuente, tamano, anchoMaximo, maxLineas) {
+      const palabras = texto.trim().split(/\s+/).filter(Boolean);
+      const lineas = [];
+      let linea = '';
+      for (const palabra of palabras) {
+        const candidata = linea ? `${linea} ${palabra}` : palabra;
+        if (fuente.widthOfTextAtSize(candidata, tamano) <= anchoMaximo || !linea) {
+          linea = candidata;
+        } else {
+          lineas.push(linea);
+          linea = palabra;
+          if (lineas.length === maxLineas) {
+            linea = '';
+            break;
+          }
+        }
+      }
+      if (linea && lineas.length < maxLineas) lineas.push(linea);
+      return lineas;
+    }
 
-      const centroX = anchoPagina / 2;
-      const centroY = y + altoPie / 2;
-      const radioDiamante = 5.8 * escalaReferenciaAMm;
-      pdf.setFillColor(255, 255, 255);
-      pdf.triangle(centroX, centroY - radioDiamante, centroX + radioDiamante, centroY, centroX, centroY + radioDiamante, 'F');
-      pdf.triangle(centroX, centroY - radioDiamante, centroX - radioDiamante, centroY, centroX, centroY + radioDiamante, 'F');
-      pdf.setDrawColor(210, 210, 210);
-      pdf.setLineWidth(0.35);
-      pdf.line(centroX, centroY - radioDiamante, centroX + radioDiamante, centroY);
-      pdf.line(centroX + radioDiamante, centroY, centroX, centroY + radioDiamante);
-      pdf.line(centroX, centroY + radioDiamante, centroX - radioDiamante, centroY);
-      pdf.line(centroX - radioDiamante, centroY, centroX, centroY - radioDiamante);
-      pdf.setTextColor(64, 64, 64);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(8);
-      pdf.text(String(numeroPagina).padStart(2, '0'), centroX, centroY + 1.2 * escalaReferenciaAMm, { align: 'center' });
+    function dibujarNumeroPaginaPlantillaPdf(pagina, numeroPagina, altoPagina, fuente, colorTexto) {
+      const texto = String(numeroPagina).padStart(2, '0');
+      const tamano = 14;
+      const ancho = fuente.widthOfTextAtSize(texto, tamano);
+      pagina.drawText(texto, {
+        x: 316.707 - ancho / 2,
+        y: altoPagina - 1297.5,
+        size: tamano,
+        font: fuente,
+        color: colorTexto
+      });
     }
 
     function actualizarProgresoPdf(porcentaje, mensaje) {
