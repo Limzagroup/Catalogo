@@ -1421,7 +1421,7 @@
       height: 180px;
       margin-bottom: 12px;
       border-radius: 12px;
-      background: #f1f5f9;
+      background: #fff;
       object-fit: contain;
     }
 
@@ -1689,8 +1689,8 @@
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
   <script src="https://accounts.google.com/gsi/client" defer></script>
   <script>
-    const URL_API_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbwVvAAODNFh4408zZRaxd89p-rWIjXvBWc5_wH3_ofX0fz4NJUqpHrvFLaIWoLkkoAv/exec";
     const URL_API_EDICION_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbz6CAkq2nh-FnyUE6jE4dTmwPbIkFog10jEr4xuJp11-XbqB_mceR5AAiIhuuoIiw8kCg/exec";
+    const URL_API_APPS_SCRIPT = URL_API_EDICION_APPS_SCRIPT;
     const GOOGLE_CLIENT_ID = "359363906061-o8q5s2068sbbmon7ohsgnvctvlm12ls6.apps.googleusercontent.com";
     const CORREO_ADMIN_CATALOGO = "limzagroup0@gmail.com";
     const CACHE_CATALOGO_LOCAL_KEY = 'limza-catalogo-v1';
@@ -2086,8 +2086,8 @@
         pdf.save(nombreArchivo);
         mostrarEstado(getById('estadoPdf'), 'PDF generado y descargado.', 'success');
       } catch (err) {
-        console.error('No se pudo generar el catálogo PDF:', err);
-        mostrarEstado(getById('estadoPdf'), err.message || 'No se pudo generar el PDF. Recarga la página e inténtalo de nuevo.', 'error');
+        console.error('No se pudo generar el catálogo PDF.');
+        mostrarEstado(getById('estadoPdf'), 'No se pudo generar el PDF. Intenta nuevamente.', 'error');
       } finally {
         boton.disabled = false;
       }
@@ -2110,7 +2110,7 @@
         if (!respuesta.ok) throw new Error(`No se pudieron cargar las imágenes del catálogo (HTTP ${respuesta.status}).`);
         const resultado = await respuesta.json();
         if (!resultado.exito || !resultado.imagenes) {
-          throw new Error(resultado.mensaje || 'El servidor no pudo preparar las imágenes para el PDF.');
+          throw new Error('No se pudieron preparar las imágenes para el PDF.');
         }
         Object.assign(imagenesDataUrl, resultado.imagenes);
       }
@@ -2294,7 +2294,7 @@
               throw new Error('El servidor no devolvió JSON válido. Comprueba que code.js esté publicado.');
             }
             if (!respuesta.ok || !resultado.exito) {
-              throw new Error(resultado.mensaje || `El servidor respondió con estado ${respuesta.status}.`);
+              throw new Error('No se pudo guardar la imagen. Comprueba tu sesión e inténtalo de nuevo.');
             }
 
             if (resultado.producto.estado === 'omitida') {
@@ -2317,7 +2317,7 @@
           } catch (error) {
             errores += 1;
             estadoFila.className = 'text-danger text-end';
-            estadoFila.textContent = error.message || 'No se pudo guardar esta imagen.';
+            estadoFila.textContent = 'No se pudo guardar la imagen. Inténtalo de nuevo.';
           }
           actualizarProgresoCargaMasiva(indice + 1, tareas.length);
         }
@@ -2353,7 +2353,7 @@
         if (!logos || Array.isArray(logos) || typeof logos !== 'object') {
           throw new Error('La respuesta de logos no tiene el formato esperado.');
         }
-        if (logos.exito === false) throw new Error(logos.mensaje || 'No se pudieron leer los logos de marcas.');
+        if (logos.exito === false) throw new Error('No se pudieron leer los logos de marcas.');
         logosMarcas = logos;
         const datalist = getById('marcasExistentes');
         datalist.replaceChildren();
@@ -2537,7 +2537,7 @@
           throw new Error('El servidor no devolvió una respuesta válida. Comprueba el despliegue de Apps Script.');
         }
         if (!respuesta.ok || !resultado.exito) {
-          throw new Error(resultado.mensaje || `El servidor respondió con estado ${respuesta.status}.`);
+          throw new Error('No se pudo guardar el producto. Comprueba tu sesión e inténtalo de nuevo.');
         }
 
         catalogo.push({
@@ -2556,8 +2556,8 @@
         getById('formularioEdicion').reset();
         limpiarImagenesEdicion();
       } catch (err) {
-        console.error('No se pudo agregar el producto al catálogo:', err);
-        mostrarEstado(getById('estadoEdicion'), err.message || 'No se pudo guardar el cambio.', 'error');
+        console.error('No se pudo agregar el producto al catálogo.');
+        mostrarEstado(getById('estadoEdicion'), 'No se pudo guardar el cambio. Intenta nuevamente.', 'error');
       } finally {
         revisarFormularioEdicion();
       }
@@ -2601,7 +2601,7 @@
             ? datos
             : (Array.isArray(datos?.catalogo) ? datos.catalogo : null);
           if (!lista) {
-            throw new Error(datos?.mensaje || 'El servidor devolvió un catálogo con formato inválido.');
+            throw new Error('El servidor devolvió un catálogo con formato inválido.');
           }
           guardarCatalogoLocal(lista);
           if (!catalogoRenderizado || JSON.stringify(lista) !== JSON.stringify(catalogo)) {
@@ -2612,12 +2612,15 @@
           const cargando = document.getElementById('cargando');
           const mensaje = catalogoCacheCargado
             ? 'No se pudo actualizar el inventario. Se muestra el catálogo guardado recientemente.'
-            : (err.message || 'Error de sincronización con el servidor de inventario.');
-          cargando.innerHTML = `<div class="text-danger fw-bold">${mensaje}</div>`;
+            : 'No se pudo cargar el catálogo. Intenta recargar la página más tarde.';
+          const aviso = document.createElement('div');
+          aviso.className = 'text-danger fw-bold';
+          aviso.textContent = mensaje;
+          cargando.replaceChildren(aviso);
           cargando.classList.remove('d-none');
           cargando.setAttribute('aria-busy', 'false');
           cargando.setAttribute('role', 'alert');
-          console.error("Fallo de red:", err);
+          console.error('No se pudo sincronizar el catálogo.');
         });
     }
 
@@ -2730,7 +2733,7 @@
         col.innerHTML = `
           <div class="card card-product p-3 mb-1 ${clasesExtras}">
             ${imagenProducto
-              ? `<img class="product-photo" src="${escaparHtml(imagenProducto)}" alt="${escaparHtml(prod.nombre)}" loading="lazy">`
+              ? `<img class="product-photo" src="${escaparHtml(obtenerUrlMiniaturaDrive(imagenProducto) || imagenProducto)}" alt="${escaparHtml(prod.nombre)}" loading="lazy">`
               : '<div class="product-photo d-flex align-items-center justify-content-center text-muted"><i class="bi bi-image fs-1" aria-hidden="true"></i></div>'}
             <div class="d-flex justify-content-between align-items-start mb-2">
               <span class="badge badge-cat" aria-label="Marca: ${escaparHtml(prod.categoria)}">
@@ -2748,6 +2751,23 @@
             </div>
           </div>
         `;
+        const imagenElemento = col.querySelector('img.product-photo');
+        if (imagenElemento) {
+          imagenElemento.dataset.urlOriginal = imagenProducto;
+          imagenElemento.addEventListener('error', function() {
+            if (this.dataset.usandoOriginal !== 'true' && this.dataset.urlOriginal !== this.src) {
+              this.dataset.usandoOriginal = 'true';
+              this.src = this.dataset.urlOriginal;
+              return;
+            }
+
+            const marcador = document.createElement('div');
+            marcador.className = 'product-photo d-flex align-items-center justify-content-center text-muted';
+            marcador.setAttribute('aria-hidden', 'true');
+            marcador.innerHTML = '<i class="bi bi-image fs-1"></i>';
+            this.replaceWith(marcador);
+          });
+        }
         tarjetas.appendChild(col);
       });
       contenedor.appendChild(tarjetas);
@@ -2758,6 +2778,17 @@
       try {
         const url = new URL(valor);
         return url.protocol === 'https:' ? url.href : '';
+      } catch (err) {
+        return '';
+      }
+    }
+
+    function obtenerUrlMiniaturaDrive(valor) {
+      try {
+        const url = new URL(valor);
+        if (url.hostname !== 'drive.google.com') return '';
+        const id = url.searchParams.get('id') || url.pathname.match(/\/file\/d\/([A-Za-z0-9_-]+)/)?.[1];
+        return id ? `https://drive.google.com/thumbnail?id=${encodeURIComponent(id)}&sz=w800` : '';
       } catch (err) {
         return '';
       }
