@@ -2035,11 +2035,12 @@
       generacionPdfActiva = generacion;
       boton.disabled = true;
       getById('contenedorProgresoPdf').hidden = false;
-      actualizarProgresoPdf(0, 'Preparando productos e imágenes…');
-      mostrarEstado(getById('estadoPdf'), 'Preparando productos e imágenes para el PDF…');
+      actualizarProgresoPdf(0, 'Iniciando generación…');
+      mostrarEstado(getById('estadoPdf'), '');
       try {
         const { PDFDocument, StandardFonts, rgb } = window.PDFLib;
         const bytesPlantilla = await cargarPlantillaCatalogoPdf(generacion.controller.signal);
+        actualizarProgresoPdf(2, 'Cargando plantilla…');
         comprobarGeneracionPdf(generacion);
         const documento = await PDFDocument.create();
         const [fondoPlantilla] = await documento.embedPdf(bytesPlantilla, [0]);
@@ -2057,16 +2058,52 @@
         const filas = 5;
         const productosPorPagina = columnas * filas;
         const totalPaginas = Math.ceil(productos.length / productosPorPagina);
+        const paginasProductos = Array.from({ length: totalPaginas }, (_, indicePagina) =>
+          productos.slice(indicePagina * productosPorPagina, (indicePagina + 1) * productosPorPagina)
+        );
+        const progresoImagenesPaginas = Array(totalPaginas).fill(0);
+        const cargasImagenesPendientes = new Map();
+        let paginasArmadas = 0;
+        const actualizarProgresoGeneracion = mensaje => {
+          const productosPreparados = progresoImagenesPaginas.reduce(
+            (total, progreso, indice) => total + paginasProductos[indice].length * progreso,
+            0
+          );
+          const fraccionPreparacion = productosPreparados / productos.length;
+          const fraccionArmado = paginasArmadas / totalPaginas;
+          actualizarProgresoPdf(5 + fraccionPreparacion * 65 + fraccionArmado * 25, mensaje);
+        };
+        const iniciarCargaImagenesPagina = indicePagina => {
+          const promesa = cargarImagenesPdf(
+            paginasProductos[indicePagina],
+            generacion.controller.signal,
+            fraccion => {
+              progresoImagenesPaginas[indicePagina] = fraccion;
+              actualizarProgresoGeneracion('Preparando imágenes');
+            }
+          ).then(
+            imagenes => ({ imagenes }),
+            error => ({ error })
+          );
+          cargasImagenesPendientes.set(indicePagina, promesa);
+        };
+
+        actualizarProgresoPdf(5, 'Preparando páginas…');
+        for (let indicePagina = 0; indicePagina < Math.min(2, totalPaginas); indicePagina += 1) {
+          iniciarCargaImagenesPagina(indicePagina);
+        }
 
         for (let indicePagina = 0; indicePagina < totalPaginas; indicePagina += 1) {
-          const inicioPagina = indicePagina * productosPorPagina;
-          const productosPagina = productos.slice(inicioPagina, inicioPagina + productosPorPagina);
-          const imagenesPagina = await cargarImagenesPdf(productosPagina, generacion.controller.signal);
+          const cargaImagenes = await cargasImagenesPendientes.get(indicePagina);
+          cargasImagenesPendientes.delete(indicePagina);
+          if (cargaImagenes.error) throw cargaImagenes.error;
+          const productosPagina = paginasProductos[indicePagina];
+          const imagenesPagina = cargaImagenes.imagenes;
           comprobarGeneracionPdf(generacion);
-          actualizarProgresoPdf(
-            Math.round((indicePagina / totalPaginas) * 95),
-            `Armando PDF: preparando página ${indicePagina + 1} de ${totalPaginas}…`
-          );
+          const siguienteIndicePagina = indicePagina + 2;
+          if (siguienteIndicePagina < totalPaginas) {
+            iniciarCargaImagenesPagina(siguienteIndicePagina);
+          }
 
           const pagina = documento.addPage([anchoPagina, altoPagina]);
           pagina.drawPage(fondoPlantilla, { x: 0, y: 0, width: anchoPagina, height: altoPagina });
@@ -2100,10 +2137,8 @@
             colorTexto
           );
 
-          actualizarProgresoPdf(
-            Math.round(((indicePagina + 1) / totalPaginas) * 95),
-            `Armando PDF: página ${indicePagina + 1} de ${totalPaginas}…`
-          );
+          paginasArmadas += 1;
+          actualizarProgresoGeneracion(`Armando página ${indicePagina + 1} de ${totalPaginas}`);
           await new Promise(resolve => requestAnimationFrame(resolve));
           comprobarGeneracionPdf(generacion);
         }
@@ -2111,15 +2146,17 @@
         const nombreArchivo = filtrarPorMarca
           ? `catalogo-limza-${marcasElegidas.map(nombre => nombre.toLowerCase().replace(/[^a-z0-9]+/g, '-')).join('-')}.pdf`
           : 'catalogo-limza-completo.pdf';
+        actualizarProgresoPdf(96, 'Guardando PDF…');
         const salida = await documento.save();
         comprobarGeneracionPdf(generacion);
+        actualizarProgresoPdf(99, 'Preparando descarga…');
         const urlDescarga = URL.createObjectURL(new Blob([salida], { type: 'application/pdf' }));
         const enlaceDescarga = document.createElement('a');
         enlaceDescarga.href = urlDescarga;
         enlaceDescarga.download = nombreArchivo;
         enlaceDescarga.click();
         setTimeout(() => URL.revokeObjectURL(urlDescarga), 1000);
-        actualizarProgresoPdf(100, 'PDF generado.');
+        actualizarProgresoPdf(100, 'Descarga lista.');
         mostrarEstado(getById('estadoPdf'), 'PDF generado y descargado.', 'success');
       } catch (err) {
         if (generacion.controller.signal.aborted) return;
@@ -2277,54 +2314,78 @@
     }
 
     function actualizarProgresoPdf(porcentaje, mensaje) {
+      const porcentajeExacto = Math.max(0, Math.min(100, Math.round(porcentaje)));
       const progreso = getById('progresoPdf');
-      progreso.value = porcentaje;
-      progreso.setAttribute('aria-valuetext', `${porcentaje}%`);
-      getById('textoProgresoPdf').textContent = mensaje;
+      progreso.value = porcentajeExacto;
+      progreso.setAttribute('aria-valuetext', `${porcentajeExacto}%`);
+      getById('textoProgresoPdf').textContent = `${porcentajeExacto}% · ${mensaje}`;
     }
 
-    async function cargarImagenesPdf(productos, signal) {
+    async function cargarImagenesPdf(productos, signal, actualizarProgreso = () => {}) {
       const ids = [...new Set(productos.map(producto => extraerIdImagenDrive(producto.imagen)).filter(Boolean))];
       const imagenesDataUrl = {};
+      const lotes = [];
       for (let inicio = 0; inicio < ids.length; inicio += 4) {
-        const lote = ids.slice(inicio, inicio + 4);
-        let resultado;
-        for (let intento = 0; intento < 3; intento += 1) {
-          try {
-            if (signal.aborted) throw new DOMException('Generación del PDF cancelada.', 'AbortError');
-            const respuesta = await fetch(
-              `${URL_API_EDICION_APPS_SCRIPT}?action=imagenesPdf&ids=${encodeURIComponent(lote.join(','))}`,
-              { cache: 'no-store', signal }
-            );
-            if (!respuesta.ok) {
-              if (respuesta.status < 500 && respuesta.status !== 429) {
-                throw new Error('No se pudieron cargar las imágenes para el PDF.');
+        lotes.push(ids.slice(inicio, inicio + 4));
+      }
+      let lotesCompletados = 0;
+      for (let inicio = 0; inicio < lotes.length; inicio += 3) {
+        const resultados = await Promise.all(lotes.slice(inicio, inicio + 3).map(async lote => {
+          let resultado;
+          for (let intento = 0; intento < 3; intento += 1) {
+            try {
+              if (signal.aborted) throw new DOMException('Generación del PDF cancelada.', 'AbortError');
+              const respuesta = await fetch(
+                `${URL_API_EDICION_APPS_SCRIPT}?action=imagenesPdf&ids=${encodeURIComponent(lote.join(','))}`,
+                { cache: 'no-store', signal }
+              );
+              if (!respuesta.ok) {
+                if (respuesta.status < 500 && respuesta.status !== 429) {
+                  throw new Error('No se pudieron cargar las imágenes para el PDF.');
+                }
+                throw new Error('Servicio temporalmente no disponible.');
               }
-              throw new Error('Servicio temporalmente no disponible.');
+              resultado = await respuesta.json();
+              if (!resultado.exito || !resultado.imagenes) {
+                throw new Error('No se pudieron preparar las imágenes para el PDF.');
+              }
+              return resultado.imagenes;
+            } catch (error) {
+              if (signal.aborted) throw error;
+              if (intento === 2 || error.message === 'No se pudieron preparar las imágenes para el PDF.' ||
+                  error.message === 'No se pudieron cargar las imágenes para el PDF.') {
+                throw error;
+              }
+              await new Promise(resolve => setTimeout(resolve, 400 * (intento + 1)));
             }
-            resultado = await respuesta.json();
-            if (!resultado.exito || !resultado.imagenes) {
-              throw new Error('No se pudieron preparar las imágenes para el PDF.');
-            }
-            break;
-          } catch (error) {
-            if (signal.aborted) throw error;
-            if (intento === 2 || error.message === 'No se pudieron preparar las imágenes para el PDF.' ||
-                error.message === 'No se pudieron cargar las imágenes para el PDF.') {
-              throw error;
-            }
-            await new Promise(resolve => setTimeout(resolve, 400 * (intento + 1)));
           }
-        }
-        Object.assign(imagenesDataUrl, resultado.imagenes);
+          throw new Error('No se pudieron cargar las imágenes para el PDF.');
+        }));
+        resultados.forEach(imagenes => Object.assign(imagenesDataUrl, imagenes));
+        lotesCompletados += resultados.length;
+        if (lotes.length) actualizarProgreso(0.5 * lotesCompletados / lotes.length);
+      }
+
+      const entradasImagenes = Object.entries(imagenesDataUrl);
+      if (!entradasImagenes.length) {
+        actualizarProgreso(1);
+        return {};
       }
 
       const imagenesPdf = {};
-      const entradasImagenes = Object.entries(imagenesDataUrl);
-      for (let indice = 0; indice < entradasImagenes.length; indice += 1) {
-        if (signal.aborted) throw new DOMException('Generación del PDF cancelada.', 'AbortError');
-        const [id, dataUrl] = entradasImagenes[indice];
-        imagenesPdf[id] = await convertirImagenParaPdf(dataUrl, signal);
+      let imagenesCompletadas = 0;
+      for (let inicio = 0; inicio < entradasImagenes.length; inicio += 4) {
+        const lote = entradasImagenes.slice(inicio, inicio + 4);
+        const imagenesPreparadas = await Promise.all(lote.map(async ([id, dataUrl]) => {
+          if (signal.aborted) throw new DOMException('Generación del PDF cancelada.', 'AbortError');
+          return [id, await convertirImagenParaPdf(dataUrl, signal)];
+        }));
+        imagenesPreparadas.forEach(([id, dataUrl]) => {
+          imagenesPdf[id] = dataUrl;
+        });
+        imagenesCompletadas += lote.length;
+        const fraccionConversion = imagenesCompletadas / entradasImagenes.length;
+        actualizarProgreso(0.5 + 0.5 * fraccionConversion);
       }
       return imagenesPdf;
     }
@@ -3080,3 +3141,18 @@
         return '';
       }
     }
+
+    function obtenerUrlMiniaturaDrive(valor) {
+      try {
+        const url = new URL(valor);
+        if (url.hostname !== 'drive.google.com') return '';
+        const id = url.searchParams.get('id') || url.pathname.match(/\/file\/d\/([A-Za-z0-9_-]+)/)?.[1];
+        return id ? `https://drive.google.com/thumbnail?id=${encodeURIComponent(id)}&sz=w800` : '';
+      } catch (err) {
+        return '';
+      }
+    }
+
+  </script>
+</body>
+</html>
