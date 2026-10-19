@@ -70,6 +70,17 @@
     .badge-cat img {
       display: none !important;
     }
+    .product-card-footer .badge-cat {
+      font-size: 0.85rem;
+      font-weight: 700;
+    }
+    .product-card-footer .price-tag,
+    body.light-mode .product-card-footer .price-tag {
+      color: var(--brand-orange) !important;
+      font-size: 1.4rem;
+      line-height: 1;
+      white-space: nowrap;
+    }
     .price-tag {
       color: #0f172a;
       font-size: 1.25rem;
@@ -2776,18 +2787,18 @@
         const col = document.createElement('div');
         col.className = 'col-12 col-md-6 col-xl-4';
         col.innerHTML = `
-          <div class="card card-product p-3 mb-1 ${clasesExtras}">
+          <div class="card card-product d-flex flex-column p-3 mb-1 ${clasesExtras}">
             ${imagenProducto
               ? `<img class="product-photo" src="${escaparHtml(obtenerUrlMiniaturaDrive(imagenProducto) || imagenProducto)}" alt="${escaparHtml(prod.nombre)}" loading="lazy">`
               : '<div class="product-photo d-flex align-items-center justify-content-center text-muted"><i class="bi bi-image fs-1" aria-hidden="true"></i></div>'}
-            <div class="d-flex justify-content-between align-items-start mb-2">
-              <span class="badge badge-cat" aria-label="Marca: ${escaparHtml(prod.categoria)}">
-                ${escaparHtml(prod.categoria)}
-              </span>
+            <div class="d-flex justify-content-end align-items-start mb-2">
               <span class="text-muted small fw-semibold">${escaparHtml(prod.codigo)}</span>
             </div>
             <div class="fw-bold fs-6 mb-3 text-dark lh-sm">${escaparHtml(prod.nombre)}</div>
-            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div class="product-card-footer d-flex justify-content-between align-items-center gap-2 mt-auto">
+              <span class="badge badge-cat" aria-label="Marca: ${escaparHtml(prod.categoria)}">
+                ${escaparHtml(prod.categoria)}
+              </span>
               <span class="price-tag">$${Number(prod.precio || 0).toFixed(2)} <span class="visually-hidden">por unidad</span></span>
               ${estadoDisponibilidad}
             </div>
