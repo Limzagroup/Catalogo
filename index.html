@@ -1115,14 +1115,14 @@
 
     body.light-mode .card-product {
       color: #191919;
-      background: #ffffff;
+      background: #f0f0f0;
       border-color: transparent;
       border-radius: 18px;
       box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
     }
 
     body.light-mode .card-product:not(.out-of-stock):hover {
-      background: #fafafa;
+      background: #e9e9e9;
       border-color: #e5e5e5;
       box-shadow: 0 8px 22px rgba(0, 0, 0, 0.1);
     }
@@ -2015,9 +2015,6 @@
       actualizarProgresoPdf(0, 'Preparando productos e imágenes…');
       mostrarEstado(getById('estadoPdf'), 'Preparando productos e imágenes para el PDF…');
       try {
-        const imagenesPdf = await cargarImagenesPdf(productos, (porcentaje, mensaje) => {
-          actualizarProgresoPdf(Math.round(porcentaje * 0.65), mensaje);
-        });
         const { jsPDF } = window.jspdf;
         const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
         const anchoPagina = pdf.internal.pageSize.getWidth();
@@ -2027,66 +2024,70 @@
         const anchoTarjeta = (anchoPagina - margen * 2 - separacion) / 2;
         const altoTarjeta = 47;
         const productosPorPagina = 8;
+        const totalPaginas = Math.ceil(productos.length / productosPorPagina);
 
-        for (let indice = 0; indice < productos.length; indice += 1) {
-          const producto = productos[indice];
-          const indicePagina = Math.floor(indice / productosPorPagina);
-          const posicionPagina = indice % productosPorPagina;
-          if (indice > 0 && posicionPagina === 0) pdf.addPage();
+        for (let indicePagina = 0; indicePagina < totalPaginas; indicePagina += 1) {
+          const inicioPagina = indicePagina * productosPorPagina;
+          const productosPagina = productos.slice(inicioPagina, inicioPagina + productosPorPagina);
+          const imagenesPagina = await cargarImagenesPdf(productosPagina);
+          actualizarProgresoPdf(
+            Math.round((indicePagina / totalPaginas) * 95),
+            `Armando PDF: preparando página ${indicePagina + 1} de ${totalPaginas}…`
+          );
 
-          if (posicionPagina === 0) {
-            pdf.setFont('helvetica', 'bold');
-            pdf.setFontSize(18);
-            pdf.setTextColor(30, 30, 30);
-            pdf.text('CATÁLOGO LIMZA GROUP', margen, 19);
-            pdf.setFont('helvetica', 'normal');
-            pdf.setFontSize(9);
-            pdf.setTextColor(100, 100, 100);
-            pdf.text(
-              filtrarPorMarca ? `Marcas: ${marcasElegidas.join(', ')}` : 'Catálogo completo',
-              margen,
-              26,
-              { maxWidth: anchoPagina - margen * 2 }
-            );
-            pdf.text(`${productos.length} productos`, anchoPagina - margen, 26, { align: 'right' });
-          }
-
-          const fila = Math.floor(posicionPagina / 2);
-          const columna = posicionPagina % 2;
-          const x = margen + columna * (anchoTarjeta + separacion);
-          const y = 34 + fila * (altoTarjeta + 5);
-          pdf.setDrawColor(220, 220, 220);
-          pdf.roundedRect(x, y, anchoTarjeta, altoTarjeta, 3, 3, 'S');
-          const idImagen = extraerIdImagenDrive(producto.imagen);
-          const imagen = imagenesPdf[idImagen];
-          const inicioTexto = imagen ? x + 32 : x + 5;
-          if (imagen) pdf.addImage(imagen, 'JPEG', x + 4, y + 8, 24, 30, undefined, 'FAST');
+          if (indicePagina > 0) pdf.addPage();
           pdf.setFont('helvetica', 'bold');
-          pdf.setFontSize(10);
-          pdf.setTextColor(35, 35, 35);
-          const nombre = pdf.splitTextToSize(String(producto.nombre || ''), anchoTarjeta - (imagen ? 37 : 10)).slice(0, 2);
-          pdf.text(nombre, inicioTexto, y + 9);
+          pdf.setFontSize(18);
+          pdf.setTextColor(30, 30, 30);
+          pdf.text('CATÁLOGO LIMZA GROUP', margen, 19);
           pdf.setFont('helvetica', 'normal');
-          pdf.setFontSize(8);
-          pdf.setTextColor(90, 90, 90);
-          pdf.text(`Código: ${producto.codigo || 'N/A'}`, inicioTexto, y + 22);
-          pdf.text(`Marca: ${producto.categoria || 'General'}`, inicioTexto, y + 28, { maxWidth: anchoTarjeta - (imagen ? 37 : 10) });
-          pdf.setFont('helvetica', 'bold');
-          pdf.setFontSize(11);
-          pdf.setTextColor(234, 88, 12);
-          pdf.text(`$${Number(producto.precio || 0).toFixed(2)}`, inicioTexto, y + 40);
-          if (!producto.disponible) {
+          pdf.setFontSize(9);
+          pdf.setTextColor(100, 100, 100);
+          pdf.text(
+            filtrarPorMarca ? `Marcas: ${marcasElegidas.join(', ')}` : 'Catálogo completo',
+            margen,
+            26,
+            { maxWidth: anchoPagina - margen * 2 }
+          );
+          pdf.text(`${productos.length} productos`, anchoPagina - margen, 26, { align: 'right' });
+
+          productosPagina.forEach((producto, posicionPagina) => {
+            const fila = Math.floor(posicionPagina / 2);
+            const columna = posicionPagina % 2;
+            const x = margen + columna * (anchoTarjeta + separacion);
+            const y = 34 + fila * (altoTarjeta + 5);
+            pdf.setDrawColor(220, 220, 220);
+            pdf.roundedRect(x, y, anchoTarjeta, altoTarjeta, 3, 3, 'S');
+            const idImagen = extraerIdImagenDrive(producto.imagen);
+            const imagen = imagenesPagina[idImagen];
+            const inicioTexto = imagen ? x + 32 : x + 5;
+            if (imagen) pdf.addImage(imagen, 'JPEG', x + 4, y + 8, 24, 30, undefined, 'FAST');
+            pdf.setFont('helvetica', 'bold');
+            pdf.setFontSize(10);
+            pdf.setTextColor(35, 35, 35);
+            const nombre = pdf.splitTextToSize(String(producto.nombre || ''), anchoTarjeta - (imagen ? 37 : 10)).slice(0, 2);
+            pdf.text(nombre, inicioTexto, y + 9);
+            pdf.setFont('helvetica', 'normal');
             pdf.setFontSize(8);
-            pdf.setTextColor(120, 120, 120);
-            pdf.text('No disponible', x + anchoTarjeta - 5, y + 40, { align: 'right' });
-          }
-          if ((indice + 1) % 8 === 0 || indice + 1 === productos.length) {
-            actualizarProgresoPdf(
-              65 + Math.round(((indice + 1) / productos.length) * 34),
-              `Armando PDF: ${indice + 1} de ${productos.length} productos…`
-            );
-            await new Promise(resolve => requestAnimationFrame(resolve));
-          }
+            pdf.setTextColor(90, 90, 90);
+            pdf.text(`Código: ${producto.codigo || 'N/A'}`, inicioTexto, y + 22);
+            pdf.text(`Marca: ${producto.categoria || 'General'}`, inicioTexto, y + 28, { maxWidth: anchoTarjeta - (imagen ? 37 : 10) });
+            pdf.setFont('helvetica', 'bold');
+            pdf.setFontSize(11);
+            pdf.setTextColor(234, 88, 12);
+            pdf.text(`$${Number(producto.precio || 0).toFixed(2)}`, inicioTexto, y + 40);
+            if (!producto.disponible) {
+              pdf.setFontSize(8);
+              pdf.setTextColor(120, 120, 120);
+              pdf.text('No disponible', x + anchoTarjeta - 5, y + 40, { align: 'right' });
+            }
+          });
+
+          actualizarProgresoPdf(
+            Math.round(((indicePagina + 1) / totalPaginas) * 95),
+            `Armando PDF: página ${indicePagina + 1} de ${totalPaginas}…`
+          );
+          await new Promise(resolve => requestAnimationFrame(resolve));
         }
 
         const paginas = pdf.getNumberOfPages();
@@ -2128,27 +2129,38 @@
       getById('textoProgresoPdf').textContent = mensaje;
     }
 
-    async function cargarImagenesPdf(productos, informarProgreso) {
+    async function cargarImagenesPdf(productos) {
       const ids = [...new Set(productos.map(producto => extraerIdImagenDrive(producto.imagen)).filter(Boolean))];
       const imagenesDataUrl = {};
-      if (!ids.length) informarProgreso(100, 'No hay imágenes para cargar; armando PDF…');
       for (let inicio = 0; inicio < ids.length; inicio += 4) {
         const lote = ids.slice(inicio, inicio + 4);
-        const respuesta = await fetch(
-          `${URL_API_EDICION_APPS_SCRIPT}?action=imagenesPdf&ids=${encodeURIComponent(lote.join(','))}`,
-          { cache: 'no-store' }
-        );
-        if (!respuesta.ok) throw new Error(`No se pudieron cargar las imágenes del catálogo (HTTP ${respuesta.status}).`);
-        const resultado = await respuesta.json();
-        if (!resultado.exito || !resultado.imagenes) {
-          throw new Error('No se pudieron preparar las imágenes para el PDF.');
+        let resultado;
+        for (let intento = 0; intento < 3; intento += 1) {
+          try {
+            const respuesta = await fetch(
+              `${URL_API_EDICION_APPS_SCRIPT}?action=imagenesPdf&ids=${encodeURIComponent(lote.join(','))}`,
+              { cache: 'no-store' }
+            );
+            if (!respuesta.ok) {
+              if (respuesta.status < 500 && respuesta.status !== 429) {
+                throw new Error('No se pudieron cargar las imágenes para el PDF.');
+              }
+              throw new Error('Servicio temporalmente no disponible.');
+            }
+            resultado = await respuesta.json();
+            if (!resultado.exito || !resultado.imagenes) {
+              throw new Error('No se pudieron preparar las imágenes para el PDF.');
+            }
+            break;
+          } catch (error) {
+            if (intento === 2 || error.message === 'No se pudieron preparar las imágenes para el PDF.' ||
+                error.message === 'No se pudieron cargar las imágenes para el PDF.') {
+              throw error;
+            }
+            await new Promise(resolve => setTimeout(resolve, 400 * (intento + 1)));
+          }
         }
         Object.assign(imagenesDataUrl, resultado.imagenes);
-        const procesadas = Math.min(inicio + lote.length, ids.length);
-        informarProgreso(
-          Math.round((procesadas / ids.length) * 50),
-          `Cargando imágenes: ${procesadas} de ${ids.length}…`
-        );
       }
 
       const imagenesPdf = {};
@@ -2156,10 +2168,6 @@
       for (let indice = 0; indice < entradasImagenes.length; indice += 1) {
         const [id, dataUrl] = entradasImagenes[indice];
         imagenesPdf[id] = await convertirImagenParaPdf(dataUrl);
-        informarProgreso(
-          50 + Math.round(((indice + 1) / Math.max(entradasImagenes.length, 1)) * 50),
-          `Preparando imágenes: ${indice + 1} de ${entradasImagenes.length}…`
-        );
       }
       return imagenesPdf;
     }
