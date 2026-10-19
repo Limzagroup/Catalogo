@@ -1476,7 +1476,7 @@
     const GOOGLE_CLIENT_ID = "359363906061-o8q5s2068sbbmon7ohsgnvctvlm12ls6.apps.googleusercontent.com";
     const CORREO_ADMIN_CATALOGO = "limzagroup0@gmail.com";
     const CACHE_CATALOGO_LOCAL_KEY = 'limza-catalogo-v1';
-    const CACHE_CATALOGO_LOCAL_MAX_AGE_MS = 60 * 1000;
+    const CACHE_CATALOGO_LOCAL_MAX_AGE_MS = 24 * 60 * 60 * 1000;
     let catalogo = [];
     let catalogoCacheCargado = false;
     let catalogoRenderizado = false;
@@ -2615,7 +2615,7 @@
         .catch(err => {
           const cargando = document.getElementById('cargando');
           const mensaje = catalogoCacheCargado
-            ? 'No se pudo actualizar el inventario. Se muestra el catálogo guardado recientemente.'
+            ? 'No se pudo actualizar el inventario. Se muestra el último catálogo guardado y podría estar desactualizado.'
             : 'No se pudo cargar el catálogo. Intenta recargar la página más tarde.';
           const aviso = document.createElement('div');
           aviso.className = 'text-danger fw-bold';
