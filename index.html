@@ -825,6 +825,11 @@
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
       }
+
+      .spinner-border {
+        animation-duration: 1.2s !important;
+        animation-iteration-count: infinite !important;
+      }
     }
 
     .navbar .container {
@@ -1709,6 +1714,7 @@
     let correoGoogleCatalogo = '';
     let expiracionGoogleCatalogo = 0;
     let googleIdentityInicializado = false;
+    let generacionPdfActiva = null;
 
     const getById = (id) => document.getElementById(id);
 
@@ -1719,6 +1725,7 @@
       getById('btnAbrirMenu').addEventListener('click', alternarMenu);
       getById('btnAbrirPdf').addEventListener('click', abrirDialogoPdf);
       getById('btnGenerarPdf').addEventListener('click', generarCatalogoPdf);
+      getById('dialogoPdf').addEventListener('close', cancelarGeneracionPdf);
       getById('btnAbrirEdicion').addEventListener('click', abrirDialogoEdicion);
       getById('btnAbrirCargaMasiva').addEventListener('click', abrirDialogoCargaMasiva);
       getById('btnCerrarEdicion').addEventListener('click', cerrarDialogoEdicion);
@@ -1990,11 +1997,25 @@
       getById('marcasPdf').hidden = !elegirMarcas;
     }
 
+    function cancelarGeneracionPdf() {
+      if (!generacionPdfActiva) return;
+      generacionPdfActiva.controller.abort();
+      generacionPdfActiva = null;
+      getById('btnGenerarPdf').disabled = false;
+    }
+
+    function comprobarGeneracionPdf(generacion) {
+      if (generacion.controller.signal.aborted) {
+        throw new DOMException('Generación del PDF cancelada.', 'AbortError');
+      }
+    }
+
     async function generarCatalogoPdf() {
       if (!catalogoRenderizado || !window.PDFLib?.PDFDocument) {
         mostrarEstado(getById('estadoPdf'), 'No se pudo cargar el catálogo o el generador de PDF. Recarga la página e inténtalo de nuevo.', 'error');
         return;
       }
+      if (generacionPdfActiva) return;
 
       const marcasElegidas = [...document.querySelectorAll('input[name="marcaPdf"]:checked')].map(input => input.value);
       const filtrarPorMarca = document.querySelector('input[name="alcancePdf"]:checked').value === 'marcas';
@@ -2010,19 +2031,24 @@
       }
 
       const boton = getById('btnGenerarPdf');
+      const generacion = { controller: new AbortController() };
+      generacionPdfActiva = generacion;
       boton.disabled = true;
       getById('contenedorProgresoPdf').hidden = false;
       actualizarProgresoPdf(0, 'Preparando productos e imágenes…');
       mostrarEstado(getById('estadoPdf'), 'Preparando productos e imágenes para el PDF…');
       try {
         const { PDFDocument, StandardFonts, rgb } = window.PDFLib;
-        const bytesPlantilla = await cargarPlantillaCatalogoPdf();
+        const bytesPlantilla = await cargarPlantillaCatalogoPdf(generacion.controller.signal);
+        comprobarGeneracionPdf(generacion);
         const documento = await PDFDocument.create();
         const [fondoPlantilla] = await documento.embedPdf(bytesPlantilla, [0]);
+        comprobarGeneracionPdf(generacion);
         const { width: anchoPagina, height: altoPagina } = fondoPlantilla;
         const fuenteTitulo = await documento.embedFont(StandardFonts.HelveticaBold);
         const fuenteCodigo = await documento.embedFont(StandardFonts.HelveticaBoldOblique);
         const fuentePrecio = await documento.embedFont(StandardFonts.HelveticaBold);
+        comprobarGeneracionPdf(generacion);
         const colorTexto = rgb(60 / 255, 60 / 255, 59 / 255);
         const colorBlanco = rgb(1, 1, 1);
         const imagenesIncrustadas = new Map();
@@ -2034,7 +2060,8 @@
         for (let indicePagina = 0; indicePagina < totalPaginas; indicePagina += 1) {
           const inicioPagina = indicePagina * productosPorPagina;
           const productosPagina = productos.slice(inicioPagina, inicioPagina + productosPorPagina);
-          const imagenesPagina = await cargarImagenesPdf(productosPagina);
+          const imagenesPagina = await cargarImagenesPdf(productosPagina, generacion.controller.signal);
+          comprobarGeneracionPdf(generacion);
           actualizarProgresoPdf(
             Math.round((indicePagina / totalPaginas) * 95),
             `Armando PDF: preparando página ${indicePagina + 1} de ${totalPaginas}…`
@@ -2049,6 +2076,7 @@
             let imagen = idImagen ? imagenesIncrustadas.get(idImagen) : null;
             if (!imagen && imagenDataUrl) {
               imagen = await documento.embedJpg(imagenDataUrl);
+              comprobarGeneracionPdf(generacion);
               imagenesIncrustadas.set(idImagen, imagen);
             }
             dibujarProductoPlantillaPdf(
@@ -2075,12 +2103,14 @@
             `Armando PDF: página ${indicePagina + 1} de ${totalPaginas}…`
           );
           await new Promise(resolve => requestAnimationFrame(resolve));
+          comprobarGeneracionPdf(generacion);
         }
 
         const nombreArchivo = filtrarPorMarca
           ? `catalogo-limza-${marcasElegidas.map(nombre => nombre.toLowerCase().replace(/[^a-z0-9]+/g, '-')).join('-')}.pdf`
           : 'catalogo-limza-completo.pdf';
         const salida = await documento.save();
+        comprobarGeneracionPdf(generacion);
         const urlDescarga = URL.createObjectURL(new Blob([salida], { type: 'application/pdf' }));
         const enlaceDescarga = document.createElement('a');
         enlaceDescarga.href = urlDescarga;
@@ -2090,6 +2120,7 @@
         actualizarProgresoPdf(100, 'PDF generado.');
         mostrarEstado(getById('estadoPdf'), 'PDF generado y descargado.', 'success');
       } catch (err) {
+        if (generacion.controller.signal.aborted) return;
         console.error('No se pudo generar el catálogo PDF.', err);
         actualizarProgresoPdf(
           Number(getById('progresoPdf').value),
@@ -2097,7 +2128,10 @@
         );
         mostrarEstado(getById('estadoPdf'), 'No se pudo generar el PDF. Intenta nuevamente.', 'error');
       } finally {
-        boton.disabled = false;
+        if (generacionPdfActiva === generacion) {
+          generacionPdfActiva = null;
+          boton.disabled = false;
+        }
       }
     }
 
@@ -2106,8 +2140,8 @@
       return coincidencia ? coincidencia[1] : '';
     }
 
-    async function cargarPlantillaCatalogoPdf() {
-      const respuesta = await fetch('https://raw.githubusercontent.com/Limzagroup/Catalogo/main/Plantilla002.pdf', { cache: 'force-cache' });
+    async function cargarPlantillaCatalogoPdf(signal) {
+      const respuesta = await fetch('https://raw.githubusercontent.com/Limzagroup/Catalogo/main/Plantilla002.pdf', { cache: 'force-cache', signal });
       if (!respuesta.ok) throw new Error('No se pudo cargar la plantilla del PDF.');
       return new Uint8Array(await respuesta.arrayBuffer());
     }
@@ -2181,10 +2215,8 @@
         });
 
         const precio = `PV: $${Number(producto.precio || 0).toFixed(2).replace('.', ',')}`;
-        let tamanoPrecio = 15;
-        while (fuentes.precio.widthOfTextAtSize(precio, tamanoPrecio) > 66 && tamanoPrecio > 9) {
-          tamanoPrecio -= 0.5;
-        }
+        const anchoMaximoPrecio = 54;
+        const tamanoPrecio = Math.min(15, anchoMaximoPrecio / fuentes.precio.widthOfTextAtSize(precio, 1));
         const anchoPrecio = fuentes.precio.widthOfTextAtSize(precio, tamanoPrecio);
         pagina.drawText(precio, {
           x: x + 133.025 - anchoPrecio / 2,
@@ -2237,7 +2269,7 @@
       getById('textoProgresoPdf').textContent = mensaje;
     }
 
-    async function cargarImagenesPdf(productos) {
+    async function cargarImagenesPdf(productos, signal) {
       const ids = [...new Set(productos.map(producto => extraerIdImagenDrive(producto.imagen)).filter(Boolean))];
       const imagenesDataUrl = {};
       for (let inicio = 0; inicio < ids.length; inicio += 4) {
@@ -2245,9 +2277,10 @@
         let resultado;
         for (let intento = 0; intento < 3; intento += 1) {
           try {
+            if (signal.aborted) throw new DOMException('Generación del PDF cancelada.', 'AbortError');
             const respuesta = await fetch(
               `${URL_API_EDICION_APPS_SCRIPT}?action=imagenesPdf&ids=${encodeURIComponent(lote.join(','))}`,
-              { cache: 'no-store' }
+              { cache: 'no-store', signal }
             );
             if (!respuesta.ok) {
               if (respuesta.status < 500 && respuesta.status !== 429) {
@@ -2261,6 +2294,7 @@
             }
             break;
           } catch (error) {
+            if (signal.aborted) throw error;
             if (intento === 2 || error.message === 'No se pudieron preparar las imágenes para el PDF.' ||
                 error.message === 'No se pudieron cargar las imágenes para el PDF.') {
               throw error;
@@ -2274,16 +2308,29 @@
       const imagenesPdf = {};
       const entradasImagenes = Object.entries(imagenesDataUrl);
       for (let indice = 0; indice < entradasImagenes.length; indice += 1) {
+        if (signal.aborted) throw new DOMException('Generación del PDF cancelada.', 'AbortError');
         const [id, dataUrl] = entradasImagenes[indice];
-        imagenesPdf[id] = await convertirImagenParaPdf(dataUrl);
+        imagenesPdf[id] = await convertirImagenParaPdf(dataUrl, signal);
       }
       return imagenesPdf;
     }
 
-    function convertirImagenParaPdf(dataUrl) {
+    function convertirImagenParaPdf(dataUrl, signal) {
       return new Promise((resolve, reject) => {
         const imagen = new Image();
+        const limpiar = () => signal.removeEventListener('abort', cancelar);
+        const cancelar = () => {
+          imagen.onload = null;
+          imagen.onerror = null;
+          limpiar();
+          reject(new DOMException('Generación del PDF cancelada.', 'AbortError'));
+        };
+        if (signal.aborted) {
+          cancelar();
+          return;
+        }
         imagen.onload = () => {
+          limpiar();
           const maximo = 480;
           const escala = Math.min(1, maximo / Math.max(imagen.naturalWidth, imagen.naturalHeight));
           const canvas = document.createElement('canvas');
@@ -2299,7 +2346,11 @@
           contexto.drawImage(imagen, 0, 0, canvas.width, canvas.height);
           resolve(canvas.toDataURL('image/jpeg', 0.82));
         };
-        imagen.onerror = () => reject(new Error('No se pudo procesar una imagen del catálogo.'));
+        imagen.onerror = () => {
+          limpiar();
+          reject(new Error('No se pudo procesar una imagen del catálogo.'));
+        };
+        signal.addEventListener('abort', cancelar, { once: true });
         imagen.src = dataUrl;
       });
     }
@@ -2782,11 +2833,8 @@
         renderizarCatalogo(catalogoGuardado.productos);
       }
 
-      fetch(`${URL_API_APPS_SCRIPT}?action=catalogo`, { cache: 'no-store' })
+      fetchCatalogoRemoto()
         .then(res => {
-          if (!res.ok) {
-            throw new Error(`HTTP ${res.status}`);
-          }
           return res.text();
         })
         .then(texto => {
@@ -2824,8 +2872,40 @@
           cargando.classList.remove('d-none');
           cargando.setAttribute('aria-busy', 'false');
           cargando.setAttribute('role', 'alert');
-          console.error('No se pudo sincronizar el catálogo.');
+          console.error('No se pudo sincronizar el catálogo.', err);
         });
+    }
+
+    async function fetchCatalogoRemoto() {
+      let ultimoError;
+      for (let intento = 0; intento < 3; intento += 1) {
+        const url = new URL(URL_API_APPS_SCRIPT);
+        url.searchParams.set('action', 'catalogo');
+        url.searchParams.set('_', `${Date.now()}-${intento}`);
+
+        let respuesta;
+        try {
+          respuesta = await fetch(url, { cache: 'no-store' });
+        } catch (error) {
+          ultimoError = error;
+          if (intento === 2) throw error;
+        }
+
+        if (respuesta) {
+          if (respuesta.ok) return respuesta;
+
+          const es404DeContenidoRedirigido = respuesta.status === 404 &&
+            new URL(respuesta.url).hostname === 'script.googleusercontent.com';
+          const esErrorTransitorio = es404DeContenidoRedirigido ||
+            respuesta.status === 429 ||
+            respuesta.status >= 500;
+          ultimoError = new Error(`HTTP ${respuesta.status} al cargar el catálogo.`);
+          if (!esErrorTransitorio || intento === 2) throw ultimoError;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 500 * (intento + 1)));
+      }
+      throw ultimoError || new Error('No se pudo cargar el catálogo.');
     }
 
     function leerCatalogoGuardado() {
