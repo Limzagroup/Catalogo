@@ -74,12 +74,14 @@
       font-size: 0.85rem;
       font-weight: 700;
     }
-    .product-card-footer .price-tag,
-    body.light-mode .product-card-footer .price-tag {
-      color: var(--brand-orange) !important;
-      font-size: 1.4rem;
+    .product-card-footer .price-tag {
+      color: #ffffff;
+      font-size: 1.5rem;
       line-height: 1;
       white-space: nowrap;
+    }
+    body.light-mode .product-card-footer .price-tag {
+      color: #191919;
     }
     .price-tag {
       color: #0f172a;
@@ -2592,7 +2594,7 @@
         if (!respuesta.ok || !resultado.exito) {
           throw new Error('No se pudo guardar el producto. Comprueba tu sesión e inténtalo de nuevo.');
         }
-        catalogo.push({
+        catalogo = [...catalogo, {
           fila: resultado.producto.fila,
           codigo: resultado.producto.codigo,
           nombre: resultado.producto.nombre,
@@ -2601,7 +2603,7 @@
           imagen: resultado.producto.imagen,
           logoMarca: resultado.producto.logoMarca,
           disponible: true
-        });
+        }].sort((productoA, productoB) => productoA.fila - productoB.fila);
         guardarCatalogoLocal(catalogo);
         filtrarCatalogo();
         mostrarEstado(getById('estadoEdicion'), 'Producto agregado al catálogo correctamente.', 'success');
