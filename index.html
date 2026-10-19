@@ -1666,7 +1666,7 @@
           <div id="botonGoogleMasiva" class="google-auth-button"></div>
           <button id="btnCerrarSesionMasiva" class="btn btn-sm btn-outline-secondary mt-2" type="button" hidden>Cerrar sesión</button>
         </div>
-        <p class="text-muted small">Selecciona imágenes JPG, PNG o WEBP. El nombre del archivo, sin extensión, debe coincidir exactamente con el código del producto (por ejemplo, <strong>ABC-123.jpg</strong>). Máximo 3 MB por archivo.</p>
+        <p class="text-muted small">Selecciona imágenes JPG, PNG o WEBP. El nombre del archivo, sin extensión, debe coincidir exactamente con el código del producto (por ejemplo, <strong>ABC-123.jpg</strong>). Las imágenes mayores de 3 MB se optimizan automáticamente antes de subirlas.</p>
         <p class="text-muted small">Las imágenes se cargan una por una. Si un producto ya tiene imagen, se conserva y el archivo se reporta como omitido.</p>
         <label for="archivosImagenesMasivas" class="form-label">Archivos de imagen</label>
         <input id="archivosImagenesMasivas" class="form-control" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" multiple>
@@ -2208,9 +2208,6 @@
         if (!extensionValida || !tipoValido) {
           mensaje = 'Formato no compatible (usa JPG, PNG o WEBP)';
           valido = false;
-        } else if (archivo.size > 3 * 1024 * 1024) {
-          mensaje = 'Supera el máximo de 3 MB';
-          valido = false;
         } else if (!base || base.length > 80) {
           mensaje = 'El código del archivo está vacío o supera 80 caracteres';
           valido = false;
@@ -2229,7 +2226,9 @@
         const estado = document.createElement('span');
         estado.dataset.valid = String(valido);
         estado.className = valido ? 'text-muted text-end' : 'text-danger text-end';
-        estado.textContent = mensaje;
+        estado.textContent = valido && archivo.size > TAMANO_MAXIMO_IMAGEN
+          ? 'Se optimizará antes de subir'
+          : mensaje;
         elemento.append(nombre, estado);
         resultados.appendChild(elemento);
       });
@@ -2275,7 +2274,8 @@
           mostrarEstado(getById('estadoCargaMasiva'), `Procesando ${indice + 1} de ${tareas.length}: ${archivo.name}`);
 
           try {
-            const dataUrl = await leerArchivoComoDataUrl(archivo);
+            estadoFila.textContent = archivo.size > TAMANO_MAXIMO_IMAGEN ? 'Optimizando imagen…' : 'Subiendo…';
+            const dataUrl = await prepararImagenParaSubida(archivo);
             const respuesta = await fetch(URL_API_EDICION_APPS_SCRIPT, {
               method: 'POST',
               headers: { 'Content-Type': 'text/plain;charset=utf-8', 'Accept': 'application/json' },
@@ -2317,7 +2317,7 @@
           } catch (error) {
             errores += 1;
             estadoFila.className = 'text-danger text-end';
-            estadoFila.textContent = 'No se pudo guardar la imagen. Inténtalo de nuevo.';
+            estadoFila.textContent = error.message || 'No se pudo guardar la imagen. Inténtalo de nuevo.';
           }
           actualizarProgresoCargaMasiva(indice + 1, tareas.length);
         }
@@ -2448,14 +2448,14 @@
         revisarFormularioEdicion();
         return;
       }
-      if (!['image/jpeg', 'image/png', 'image/webp'].includes(archivo.type) || archivo.size > 3 * 1024 * 1024) {
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(archivo.type)) {
         getById(idEntrada).value = '';
         if (vista.dataset.urlObjeto) URL.revokeObjectURL(vista.dataset.urlObjeto);
         delete vista.dataset.urlObjeto;
         delete vista.dataset.marcaImagen;
         vista.removeAttribute('src');
         vista.hidden = true;
-        mostrarEstado(getById('estadoEdicion'), 'Usa una imagen JPG, PNG o WEBP de máximo 3 MB.', 'error');
+        mostrarEstado(getById('estadoEdicion'), 'Usa una imagen JPG, PNG o WEBP válida.', 'error');
         revisarFormularioEdicion();
         return;
       }
@@ -2475,6 +2475,52 @@
         lector.onerror = () => reject(new Error(`No se pudo leer el archivo ${archivo.name}.`));
         lector.readAsDataURL(archivo);
       });
+    }
+
+    const TAMANO_MAXIMO_IMAGEN = 3 * 1024 * 1024;
+
+    async function prepararImagenParaSubida(archivo) {
+      if (archivo.size <= TAMANO_MAXIMO_IMAGEN) return leerArchivoComoDataUrl(archivo);
+
+      const urlObjeto = URL.createObjectURL(archivo);
+      try {
+        const imagen = new Image();
+        await new Promise((resolve, reject) => {
+          imagen.onload = resolve;
+          imagen.onerror = () => reject(new Error('No se pudo abrir la imagen para optimizarla.'));
+          imagen.src = urlObjeto;
+        });
+
+        let ancho = imagen.naturalWidth;
+        let alto = imagen.naturalHeight;
+        const ladoMaximo = 2400;
+        const escalaInicial = Math.min(1, ladoMaximo / Math.max(ancho, alto));
+        ancho = Math.max(1, Math.round(ancho * escalaInicial));
+        alto = Math.max(1, Math.round(alto * escalaInicial));
+
+        for (let intento = 0; intento < 12; intento += 1) {
+          const canvas = document.createElement('canvas');
+          canvas.width = ancho;
+          canvas.height = alto;
+          const contexto = canvas.getContext('2d');
+          if (!contexto) throw new Error('No se pudo optimizar la imagen en este navegador.');
+          contexto.fillStyle = '#fff';
+          contexto.fillRect(0, 0, ancho, alto);
+          contexto.drawImage(imagen, 0, 0, ancho, alto);
+
+          for (const calidad of [0.88, 0.78, 0.68, 0.58, 0.48]) {
+            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', calidad));
+            if (blob && blob.size <= TAMANO_MAXIMO_IMAGEN) return leerArchivoComoDataUrl(blob);
+          }
+
+          ancho = Math.max(1, Math.round(ancho * 0.82));
+          alto = Math.max(1, Math.round(alto * 0.82));
+        }
+
+        throw new Error('No se pudo reducir la imagen por debajo de 3 MB. Prueba con una imagen de menor resolución.');
+      } finally {
+        URL.revokeObjectURL(urlObjeto);
+      }
     }
 
     function limpiarImagenesEdicion() {
@@ -2514,13 +2560,13 @@
           marca: getById('marcaEdicion').value.trim(),
           imagenProducto: {
             nombre: archivoProducto.name,
-            dataUrl: await leerArchivoComoDataUrl(archivoProducto)
+            dataUrl: await prepararImagenParaSubida(archivoProducto)
           }
         };
         if (archivoMarca && !obtenerUrlLogoMarca(carga.marca)) {
           carga.imagenMarca = {
             nombre: archivoMarca.name,
-            dataUrl: await leerArchivoComoDataUrl(archivoMarca)
+            dataUrl: await prepararImagenParaSubida(archivoMarca)
           };
         }
 
