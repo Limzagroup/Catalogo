@@ -2051,6 +2051,7 @@
         comprobarGeneracionPdf(generacion);
         const colorTexto = rgb(60 / 255, 60 / 255, 59 / 255);
         const colorBlanco = rgb(1, 1, 1);
+        const colorFondoTarjetaVacia = rgb(248 / 255, 248 / 255, 248 / 255);
         const imagenesIncrustadas = new Map();
         const columnas = 3;
         const filas = 5;
@@ -2087,7 +2088,8 @@
               altoPagina,
               { titulo: fuenteTitulo, codigo: fuenteCodigo, precio: fuentePrecio },
               colorTexto,
-              colorBlanco
+              colorBlanco,
+              colorFondoTarjetaVacia
             );
           }
           dibujarNumeroPaginaPlantillaPdf(
@@ -2154,7 +2156,8 @@
       altoPagina,
       fuentes,
       colorTexto,
-      colorBlanco
+      colorBlanco,
+      colorFondoTarjetaVacia
     ) {
       const columnas = 3;
       const anchoTarjeta = 166.08075;
@@ -2166,6 +2169,17 @@
       const x = iniciosX[columna];
       const yDesdeArriba = iniciosYDesdeArriba[fila];
       const yInferiorTarjeta = altoPagina - yDesdeArriba - altoTarjeta;
+
+      if (!producto) {
+        pagina.drawRectangle({
+          x: x - 1,
+          y: yInferiorTarjeta - 1,
+          width: anchoTarjeta + 2,
+          height: altoTarjeta + 2,
+          color: colorFondoTarjetaVacia
+        });
+        return;
+      }
 
       if (imagen) {
         const cajaImagen = { x: x + 10, y: yInferiorTarjeta + 32, width: anchoTarjeta - 20, height: 136 };
@@ -3066,18 +3080,3 @@
         return '';
       }
     }
-
-    function obtenerUrlMiniaturaDrive(valor) {
-      try {
-        const url = new URL(valor);
-        if (url.hostname !== 'drive.google.com') return '';
-        const id = url.searchParams.get('id') || url.pathname.match(/\/file\/d\/([A-Za-z0-9_-]+)/)?.[1];
-        return id ? `https://drive.google.com/thumbnail?id=${encodeURIComponent(id)}&sz=w800` : '';
-      } catch (err) {
-        return '';
-      }
-    }
-
-  </script>
-</body>
-</html>
