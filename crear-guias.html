@@ -101,6 +101,64 @@
       color: var(--brand-orange);
       font-size: 1.35rem;
     }
+    .google-login-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      margin-bottom: 28px;
+      padding: 18px 20px;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      background: linear-gradient(110deg, #fffaf5, #f8fafc 68%);
+    }
+    .google-login-copy {
+      display: flex;
+      align-items: flex-start;
+      gap: 13px;
+      min-width: 0;
+    }
+    .google-login-icon {
+      width: 40px;
+      min-width: 40px;
+      height: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(249, 115, 22, 0.18);
+      border-radius: 12px;
+      background: #ffffff;
+      color: var(--brand-orange);
+      font-size: 1.1rem;
+    }
+    .google-login-title {
+      margin: 0 0 3px;
+      color: var(--text-main);
+      font-size: 0.98rem;
+      font-weight: 700;
+    }
+    .google-login-status {
+      min-height: 0;
+      margin: 0 !important;
+      color: var(--text-muted);
+      font-size: 0.87rem;
+      font-weight: 450;
+      line-height: 1.4;
+    }
+    .google-login-status.error {
+      color: #b91c1c;
+      font-weight: 600;
+    }
+    .google-login-status.success {
+      color: #166534;
+      font-weight: 600;
+    }
+    #botonGoogleGuias {
+      width: 180px;
+      min-width: 180px;
+      display: flex;
+      justify-content: flex-end;
+    }
     h1 {
       margin: 0;
       font-size: clamp(1.4rem, 3.5vw, 1.9rem);
@@ -228,6 +286,19 @@
         margin-bottom: 22px;
         padding-bottom: 18px;
       }
+      .google-login-card {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 12px;
+        margin-bottom: 24px;
+        padding: 16px;
+      }
+      #botonGoogleGuias {
+        width: 100%;
+        min-width: 0;
+        justify-content: flex-start;
+        padding-left: 53px;
+      }
       .form-heading-icon {
         width: 42px;
         min-width: 42px;
@@ -271,12 +342,24 @@
         </span>
         <h1 id="pageTitle">Crear guías de envío</h1>
       </div>
+      <div class="google-login-card">
+        <div class="google-login-copy">
+          <span class="google-login-icon" aria-hidden="true"><i class="bi bi-shield-lock"></i></span>
+          <div>
+            <p class="google-login-title">Acceso a clientes</p>
+            <p id="estadoSesionGuias" class="google-login-status" role="status" aria-live="polite">Inicia sesión con Google para cargar los clientes.</p>
+          </div>
+        </div>
+        <div id="botonGoogleGuias"></div>
+      </div>
       <form id="formularioGuias">
         <div class="row g-3">
           <div class="col-12 col-md-6">
             <div class="outlined-field">
-              <label class="form-label" for="nombreCliente">Nombre del cliente</label>
-              <input class="form-control" id="nombreCliente" name="nombreCliente" autocomplete="name" maxlength="120" required>
+              <label class="form-label" for="nombreCliente">Seleccionar cliente</label>
+              <select class="form-control" id="nombreCliente" name="nombreCliente" required disabled>
+                <option value="">Inicia sesión para cargar clientes</option>
+              </select>
               <button class="clear-field" type="button" data-clear-for="nombreCliente" aria-label="Borrar nombre del cliente"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
             </div>
           </div>
@@ -318,8 +401,7 @@
           <div class="col-md-6">
             <div class="outlined-field">
               <label class="form-label" for="numeroGuia">Número de guía</label>
-              <input class="form-control" id="numeroGuia" name="numeroGuia" maxlength="60" required>
-              <button class="clear-field" type="button" data-clear-for="numeroGuia" aria-label="Borrar número de guía"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+              <input class="form-control" id="numeroGuia" name="numeroGuia" type="number" min="540" step="1" readonly required>
             </div>
           </div>
           <div class="col-md-6">
@@ -337,11 +419,133 @@
     </section>
   </main>
   <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+  <script src="https://accounts.google.com/gsi/client" defer></script>
   <script>
+    const URL_API_GUIAS = 'https://script.google.com/macros/s/AKfycbz6CAkq2nh-FnyUE6jE4dTmwPbIkFog10jEr4xuJp11-XbqB_mceR5AAiIhuuoIiw8kCg/exec';
+    const GOOGLE_CLIENT_ID_GUIAS = '359363906061-o8q5s2068sbbmon7ohsgnvctvlm12ls6.apps.googleusercontent.com';
+    const CORREO_AUTORIZADO_GUIAS = 'limzagroup0@gmail.com';
     const formularioGuias = document.getElementById('formularioGuias');
     const botonGenerarGuias = document.getElementById('btnGenerarGuias');
     const estadoGuias = document.getElementById('estadoGuias');
+    const estadoSesionGuias = document.getElementById('estadoSesionGuias');
+    const botonGoogleGuias = document.getElementById('botonGoogleGuias');
+    const nombreClienteInput = document.getElementById('nombreCliente');
+    const numeroGuiaInput = document.getElementById('numeroGuia');
+    const claveSiguienteNumeroGuia = 'limzagroupSiguienteNumeroGuia';
+    const numeroGuiaInicial = 540;
     const pdfError = 'No se pudo generar el PDF. Recarga la página e inténtalo de nuevo.';
+    let clientesGuias = [];
+    let credencialGoogleGuias = '';
+    let correlativoDisponible = true;
+
+    function mostrarEstadoSesionGuias(mensaje, error = false) {
+      estadoSesionGuias.textContent = mensaje;
+      estadoSesionGuias.className = `google-login-status${error ? ' error' : ''}`;
+    }
+
+    async function cargarClientesGuias(idToken) {
+      nombreClienteInput.disabled = true;
+      mostrarEstadoSesionGuias('Cargando clientes desde la hoja…');
+      try {
+        const respuesta = await fetch(URL_API_GUIAS, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8', 'Accept': 'application/json' },
+          body: JSON.stringify({ action: 'obtenerClientes', idToken })
+        });
+        const texto = await respuesta.text();
+        let resultado;
+        try {
+          resultado = JSON.parse(texto);
+        } catch (error) {
+          throw new Error('El servidor no devolvió JSON válido. Comprueba que el Apps Script esté publicado.');
+        }
+        if (!respuesta.ok || !resultado.exito || !Array.isArray(resultado.clientes)) {
+          throw new Error(resultado.mensaje || 'No se pudieron cargar los clientes.');
+        }
+
+        clientesGuias = resultado.clientes.filter(cliente => cliente && String(cliente.nombre || '').trim());
+        nombreClienteInput.replaceChildren(new Option('Selecciona un cliente', ''));
+        clientesGuias.forEach((cliente, index) => {
+          const nombre = String(cliente.nombre).trim();
+          const documento = String(cliente.numeroDocumento || '').trim();
+          const opcion = new Option(documento ? `${nombre} - ${documento}` : nombre, nombre);
+          opcion.dataset.indiceCliente = String(index);
+          nombreClienteInput.add(opcion);
+        });
+        nombreClienteInput.disabled = clientesGuias.length === 0;
+        if (!clientesGuias.length) {
+          mostrarEstadoSesionGuias('No hay clientes disponibles en la pestaña CLIENTES.', true);
+          return;
+        }
+        mostrarEstadoSesionGuias(`${clientesGuias.length} cliente(s) cargados. Selecciona uno para completar sus datos.`);
+      } catch (error) {
+        console.error('Error al cargar clientes para las guías:', error);
+        credencialGoogleGuias = '';
+        mostrarEstadoSesionGuias(error.message || 'No se pudieron cargar los clientes. Inténtalo de nuevo.', true);
+      }
+    }
+
+    function recibirCredencialGoogleGuias(respuesta) {
+      try {
+        const partes = String(respuesta.credential || '').split('.');
+        if (partes.length !== 3) throw new Error('Google no devolvió una credencial válida.');
+        const payloadCodificado = partes[1].replace(/-/g, '+').replace(/_/g, '/');
+        const payload = JSON.parse(atob(payloadCodificado.padEnd(Math.ceil(payloadCodificado.length / 4) * 4, '=')));
+        const correo = String(payload.email || '').trim().toLowerCase();
+        const expiracion = Number(payload.exp) * 1000;
+        if (String(payload.email_verified).toLowerCase() !== 'true' || correo !== CORREO_AUTORIZADO_GUIAS) {
+          throw new Error(`Inicia sesión con ${CORREO_AUTORIZADO_GUIAS} para consultar los clientes.`);
+        }
+        if (!Number.isFinite(expiracion) || expiracion <= Date.now()) {
+          throw new Error('La sesión de Google ya venció. Inicia sesión de nuevo.');
+        }
+        credencialGoogleGuias = respuesta.credential;
+        cargarClientesGuias(credencialGoogleGuias);
+      } catch (error) {
+        credencialGoogleGuias = '';
+        nombreClienteInput.disabled = true;
+        mostrarEstadoSesionGuias(error.message || 'No se pudo validar la sesión de Google.', true);
+      }
+    }
+
+    function inicializarGoogleGuias() {
+      if (!window.google?.accounts?.id) {
+        mostrarEstadoSesionGuias('No se pudo cargar el inicio de sesión de Google. Recarga la página e inténtalo de nuevo.', true);
+        return;
+      }
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID_GUIAS,
+        callback: recibirCredencialGoogleGuias
+      });
+      window.google.accounts.id.renderButton(botonGoogleGuias, {
+        type: 'standard',
+        theme: 'outline',
+        size: 'large',
+        text: 'signin_with',
+        shape: 'pill',
+        width: 180,
+        logo_alignment: 'left'
+      });
+    }
+
+    function obtenerSiguienteNumeroGuia() {
+      const guardado = localStorage.getItem(claveSiguienteNumeroGuia);
+      if (guardado === null) return numeroGuiaInicial;
+      const numero = Number(guardado);
+      if (!Number.isSafeInteger(numero) || numero < numeroGuiaInicial) {
+        throw new Error('El correlativo guardado para las guías no es válido.');
+      }
+      return numero;
+    }
+
+    try {
+      numeroGuiaInput.value = String(obtenerSiguienteNumeroGuia());
+    } catch (error) {
+      correlativoDisponible = false;
+      console.error('No se pudo cargar el correlativo de las guías:', error);
+      estadoGuias.textContent = 'No se pudo cargar el correlativo de las guías. Recarga la página e inténtalo de nuevo.';
+      estadoGuias.className = 'status-message mt-3 mb-1 error';
+    }
 
     document.querySelectorAll('.clear-field').forEach(button => {
       button.addEventListener('click', () => {
@@ -349,9 +553,23 @@
         if (!field) throw new Error(`No se encontró el campo ${button.dataset.clearFor}.`);
         field.value = '';
         field.dispatchEvent(new Event('input', { bubbles: true }));
+        field.dispatchEvent(new Event('change', { bubbles: true }));
         field.focus();
       });
     });
+
+    nombreClienteInput.addEventListener('change', () => {
+      const opcion = nombreClienteInput.selectedOptions[0];
+      const indice = Number(opcion && opcion.dataset.indiceCliente);
+      const cliente = Number.isInteger(indice) ? clientesGuias[indice] : null;
+      document.getElementById('direccionCliente').value = cliente ? cliente.direccionCliente || '' : '';
+      document.getElementById('telefonoCliente').value = cliente ? cliente.telefonoCliente || '' : '';
+      document.getElementById('numeroDocumento').value = cliente ? cliente.numeroDocumento || '' : '';
+      document.getElementById('nombreVendedor').value = cliente ? cliente.nombreVendedor || '' : '';
+      document.getElementById('telefonoVendedor').value = cliente ? cliente.telefonoVendedor || '' : '';
+    });
+
+    window.addEventListener('load', inicializarGoogleGuias, { once: true });
 
     function dibujarTexto(page, text, x, y, maxWidth, font, fontSize, color, centered = false) {
       const words = String(text).trim().split(/\s+/);
@@ -601,6 +819,15 @@
 
     formularioGuias.addEventListener('submit', async event => {
       event.preventDefault();
+      if (!correlativoDisponible) {
+        estadoGuias.textContent = 'No se pudo cargar el correlativo de las guías. Recarga la página e inténtalo de nuevo.';
+        estadoGuias.className = 'status-message mt-3 mb-1 error';
+        return;
+      }
+      if (!credencialGoogleGuias || !clientesGuias.length || nombreClienteInput.disabled) {
+        mostrarEstadoSesionGuias('Inicia sesión con Google para cargar y seleccionar un cliente antes de generar la guía.', true);
+        return;
+      }
       if (!formularioGuias.reportValidity()) return;
       const datos = new FormData(formularioGuias);
       const guia = {
@@ -625,6 +852,12 @@
       estadoGuias.className = 'status-message mt-3 mb-1';
       try {
         const bytes = await generarPdfGuias(guia);
+        const siguienteNumero = Number(guia.numeroGuia) + 1;
+        if (!Number.isSafeInteger(siguienteNumero)) {
+          throw new Error('El correlativo de las guías alcanzó el límite permitido.');
+        }
+        localStorage.setItem(claveSiguienteNumeroGuia, String(siguienteNumero));
+        numeroGuiaInput.value = String(siguienteNumero);
         const blob = new Blob([bytes], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
         const enlace = document.createElement('a');
@@ -633,10 +866,10 @@
           .replace(/[\u0300-\u036f]/g, '')
           .replace(/[^a-z0-9_-]+/gi, '-')
           .replace(/^-+|-+$/g, '');
-        const numeroSeguro = limpiarNombreArchivo(guia.numeroGuia.replace(/^gu[ií]a\s*[-:#]?\s*/i, '')) || 'sin-numero';
+        const numeroSeguro = String(guia.numeroGuia).padStart(6, '0');
         const clienteSeguro = limpiarNombreArchivo(guia.nombreCliente) || 'cliente';
         enlace.href = url;
-        enlace.download = `Guia-${numeroSeguro}-${clienteSeguro}.pdf`;
+        enlace.download = `GUIA DESPACHO CAJAS ${numeroSeguro} ${clienteSeguro}.pdf`;
         document.body.appendChild(enlace);
         enlace.click();
         enlace.remove();
@@ -645,7 +878,9 @@
         estadoGuias.className = 'status-message mt-3 mb-1 success';
       } catch (error) {
         console.error('Error al generar las guías de envío:', error);
-        estadoGuias.textContent = pdfError;
+        estadoGuias.textContent = error instanceof Error && error.message.startsWith('El correlativo')
+          ? error.message
+          : pdfError;
         estadoGuias.className = 'status-message mt-3 mb-1 error';
       } finally {
         botonGenerarGuias.disabled = false;
