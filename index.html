@@ -60,7 +60,7 @@
       background: #f8fafc;
     }
     .badge-cat { 
-      background-color: transparent;
+      background-color: var(--bg-color); 
       color: var(--brand-orange); 
       font-weight: 600; 
       font-size: 0.75rem; 
@@ -192,7 +192,7 @@
       position: sticky;
       top: 85px; 
       z-index: 1030;
-      background-color: var(--bg-color); 
+      background-color: transparent;
       padding-top: 15px;
       padding-bottom: 10px;
       transition: clip-path 0.18s ease-out;
@@ -812,7 +812,7 @@
       color: var(--text-muted) !important;
     }
     .search-container {
-      background: #121212;
+      background: transparent;
     }
     .modern-search-wrapper {
       background: #242424;
@@ -961,17 +961,17 @@
       color: #6b6b6b !important;
     }
     body.light-mode .search-container {
-      background: #f0f0f0;
+      background: transparent;
     }
     body.light-mode .modern-search-wrapper {
       background: #ffffff;
       border-color: transparent;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
     }
     body.light-mode .modern-search-wrapper:focus-within {
       background: #ffffff;
       border-color: var(--brand-orange);
-      box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.22);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
     }
     body.light-mode .modern-search-input {
       color: #191919;
@@ -1162,7 +1162,8 @@
     .app-menu[hidden] {
       display: none;
     }
-    .app-menu button {
+    .app-menu button,
+    .app-menu a {
       width: 100%;
       min-height: 46px;
       padding: 10px 12px;
@@ -1174,9 +1175,12 @@
       background: transparent;
       color: #f5f5f5;
       text-align: left;
+      text-decoration: none;
     }
     .app-menu button:hover,
-    .app-menu button:focus-visible {
+    .app-menu button:focus-visible,
+    .app-menu a:hover,
+    .app-menu a:focus-visible {
       background: #292929;
       color: var(--brand-orange);
     }
@@ -1290,10 +1294,13 @@
       color: #191919;
     }
     body.light-mode .app-menu button,
+    body.light-mode .app-menu a,
     body.light-mode .edit-match-option {
       color: #191919;
     }
     body.light-mode .app-menu button:hover,
+    body.light-mode .app-menu a:hover,
+    body.light-mode .app-menu a:focus-visible,
     body.light-mode .edit-match-option {
       background: #f7f7f7;
     }
@@ -1329,7 +1336,7 @@
 <body>
   <a class="skip-link" href="#contenidoPrincipal">Saltar al contenido</a>
   <nav class="navbar navbar-dark sticky-top" aria-label="Navegación principal" style="background-color: var(--navbar-bg); z-index: 1050; border-bottom: 3px solid var(--brand-orange);">
-    <div class="container py-2 d-flex justify-content-center align-items-center">
+    <div class="container py-2 d-flex justify-content-start align-items-center">
       <!-- LOGOTIPO CORPORATIVO -->
       <img src="https://raw.githubusercontent.com/Limzagroup/Catalogo/main/LOGO_LIMZA_WHITE.webp" alt="LIMZA GROUP" width="220" height="55" fetchpriority="high" style="max-height: 55px; width: auto; object-fit: contain;">
       <button id="btnAbrirMenu" class="menu-toggle" type="button" aria-label="Abrir menú" aria-expanded="false" aria-controls="menuPrincipal">
@@ -1340,17 +1347,25 @@
           <i id="iconoModo" class="bi bi-sun" aria-hidden="true"></i>
           <span id="textoModo">Modo claro</span>
         </button>
+        <a href="https://limzagroup.github.io/pedidos/">
+          <i class="bi bi-bag-check" aria-hidden="true"></i>
+          <span>Pedidos</span>
+        </a>
+        <button id="btnCrearGuias" type="button">
+          <i class="bi bi-box-seam" aria-hidden="true"></i>
+          <span>Crear guías</span>
+        </button>
         <button id="btnAbrirPdf" type="button">
           <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>
           <span>Catálogo PDF</span>
         </button>
         <button id="btnAbrirEdicion" type="button">
           <i class="bi bi-pencil-square" aria-hidden="true"></i>
-          <span>Agregar producto</span>
+          <span>Agregar Producto</span>
         </button>
         <button id="btnAbrirCargaMasiva" type="button">
           <i class="bi bi-images" aria-hidden="true"></i>
-          <span>Carga masiva de imágenes</span>
+          <span>Carga de imágenes</span>
         </button>
       </nav>
     </div>
@@ -1503,6 +1518,9 @@
       getById('btnCambiarTema').addEventListener('click', alternarTema);
       getById('btnAbrirMenu').addEventListener('click', alternarMenu);
       getById('btnAbrirPdf').addEventListener('click', abrirDialogoPdf);
+      getById('btnCrearGuias').addEventListener('click', () => {
+        window.location.href = 'crear-guias.html';
+      });
       getById('btnGenerarPdf').addEventListener('click', generarCatalogoPdf);
       getById('dialogoPdf').addEventListener('close', cancelarGeneracionPdf);
       getById('btnAbrirEdicion').addEventListener('click', abrirDialogoEdicion);
