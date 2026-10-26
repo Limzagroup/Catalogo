@@ -477,8 +477,8 @@
           <div class="col-md-6">
             <div class="outlined-field">
               <label class="form-label" for="numeroDocumento">Número de documento</label>
-              <input class="form-control" id="numeroDocumento" name="numeroDocumento" maxlength="60" required>
-              <button class="clear-field" type="button" data-clear-for="numeroDocumento" aria-label="Borrar número de documento"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+              <input class="form-control" id="numeroDocumento" name="numeroDocumento" maxlength="60" placeholder="Ingresa el número de nota o factura" required>
+              <button class="clear-field" type="button" data-clear-for="numeroDocumento" aria-label="Borrar número de nota o factura"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
             </div>
           </div>
           <div class="col-md-6">
@@ -538,7 +538,7 @@
       if (cliente) nombreClienteInput.value = cliente.nombre;
       document.getElementById('direccionCliente').value = cliente ? cliente.direccionCliente || '' : '';
       document.getElementById('telefonoCliente').value = cliente ? cliente.telefonoCliente || '' : '';
-      document.getElementById('numeroDocumento').value = cliente ? cliente.numeroDocumento || '' : '';
+      document.getElementById('numeroDocumento').value = '';
       document.getElementById('nombreVendedor').value = cliente ? cliente.nombreVendedor || '' : '';
       document.getElementById('telefonoVendedor').value = cliente ? cliente.telefonoVendedor || '' : '';
       cerrarSugerenciasClientes();
@@ -554,7 +554,7 @@
 
       const coincidencias = clientesGuias
         .map((cliente, indice) => ({ cliente, indice }))
-        .filter(({ cliente }) => normalizarBusquedaCliente(`${cliente.nombre} ${cliente.numeroDocumento}`).includes(busqueda))
+        .filter(({ cliente }) => normalizarBusquedaCliente(`${cliente.nombre} ${cliente.rif}`).includes(busqueda))
         .slice(0, 50);
 
       if (!coincidencias.length) {
@@ -574,7 +574,7 @@
           nombre.className = 'client-suggestion-name';
           nombre.textContent = cliente.nombre;
           documento.className = 'client-suggestion-document';
-          documento.textContent = cliente.numeroDocumento ? `RIF: ${cliente.numeroDocumento}` : '';
+          documento.textContent = cliente.rif ? `RIF: ${cliente.rif}` : '';
           opcion.append(nombre, documento);
           item.appendChild(opcion);
           sugerenciasClientes.appendChild(item);
@@ -731,20 +731,43 @@
 
     window.addEventListener('load', inicializarGoogleGuias, { once: true });
 
-    function dibujarTexto(page, text, x, y, maxWidth, font, fontSize, color, centered = false) {
+    function dibujarTexto(page, text, x, y, maxWidth, font, fontSize, color, centered = false, maxLines = Infinity) {
       const words = String(text).trim().split(/\s+/);
       const lines = [];
       let line = '';
+      const agregarPalabra = word => {
+        let resto = word;
+        while (font.widthOfTextAtSize(resto, fontSize) > maxWidth) {
+          let corte = 1;
+          while (corte < resto.length && font.widthOfTextAtSize(resto.slice(0, corte + 1), fontSize) <= maxWidth) corte += 1;
+          if (line) {
+            lines.push(line);
+            line = '';
+          }
+          lines.push(resto.slice(0, corte));
+          resto = resto.slice(corte);
+        }
+        return resto;
+      };
       for (const word of words) {
-        const candidate = line ? `${line} ${word}` : word;
+        const palabraAjustada = agregarPalabra(word);
+        const candidate = line ? `${line} ${palabraAjustada}` : palabraAjustada;
         if (font.widthOfTextAtSize(candidate, fontSize) > maxWidth && line) {
           lines.push(line);
-          line = word;
+          line = palabraAjustada;
         } else {
           line = candidate;
         }
       }
       if (line) lines.push(line);
+      if (lines.length > maxLines) {
+        lines.length = maxLines;
+        let lastLine = lines[maxLines - 1].replace(/\s+$/, '');
+        while (lastLine && font.widthOfTextAtSize(`${lastLine}...`, fontSize) > maxWidth) {
+          lastLine = lastLine.slice(0, -1).replace(/\s+$/, '');
+        }
+        lines[maxLines - 1] = `${lastLine}...`;
+      }
       lines.forEach((content, index) => {
         const lineX = centered ? x + (maxWidth - font.widthOfTextAtSize(content, fontSize)) / 2 : x;
         page.drawText(content, { x: lineX, y: y - index * (fontSize + 3), size: fontSize, font, color });
@@ -752,70 +775,36 @@
       return lines.length * (fontSize + 3);
     }
 
-    function dibujarGuia(page, guia, position, fonts, colors) {
+    function dibujarGuia(page, guia, position, fonts, colors, plantilla) {
       const { x, y, width, height } = position;
-      const inset = 18;
-      const contentWidth = width - inset * 2;
       const numeroGuiaVisible = guia.numeroGuia.replace(/^gu[ií]a\s*[-:#]?\s*/i, '');
-      const blockTop = y + height - 18;
-      const sectionGap = 12;
-      let cursorY = blockTop;
+      page.drawPage(plantilla, { x, y, width, height });
 
-      page.drawRectangle({
-        x, y, width, height,
-        borderColor: colors.border,
-        borderWidth: 1.2
-      });
-
-      cursorY -= dibujarTexto(page, 'LIMZA GROUP C.A. | 0414-4238533', x + inset, cursorY, contentWidth, fonts.bold, 13, colors.muted, true);
-      cursorY -= 10;
-      const guiaTitleY = cursorY;
-      cursorY -= dibujarTexto(page, `GUÍA - ${numeroGuiaVisible}`, x + inset, cursorY, contentWidth, fonts.bold, 23, colors.orange, true);
-      cursorY -= 8;
-      const firstLabelY = cursorY - 14;
-      const lineY = (guiaTitleY + firstLabelY + 6) / 2;
-      page.drawLine({
-        start: { x: x + inset, y: lineY },
-        end: { x: x + width - inset, y: lineY },
-        thickness: 0.8,
-        color: colors.border
-      });
-      cursorY -= 14;
-
-      const drawField = (label, value, size = 11) => {
-        const labelY = cursorY;
-        page.drawText(label.toUpperCase(), {
-          x: x + inset, y: labelY, size: 8, font: fonts.bold, color: colors.muted
+      const dibujarValor = (value, left, baseline, maxWidth, maskY, maskHeight, font, fontSize, maxLines) => {
+        page.drawRectangle({
+          x: left - 1,
+          y: maskY,
+          width: maxWidth + 2,
+          height: maskHeight,
+          color: colors.paper
         });
-        const valueHeight = dibujarTexto(page, value, x + inset, labelY - 13, contentWidth, fonts.regular, size, colors.text);
-        cursorY = labelY - 13 - valueHeight - sectionGap;
+        dibujarTexto(page, value, left, baseline, maxWidth, font, fontSize, colors.text, false, maxLines);
       };
 
-      const drawPairedFields = (leftLabel, leftValue, rightLabel, rightValue) => {
-        const columnGap = 12;
-        const columnWidth = (contentWidth - columnGap) / 2;
-        const leftX = x + inset;
-        const rightX = leftX + columnWidth + columnGap;
-        const labelY = cursorY;
-        page.drawText(leftLabel.toUpperCase(), {
-          x: leftX, y: labelY, size: 8, font: fonts.bold, color: colors.muted
-        });
-        page.drawText(rightLabel.toUpperCase(), {
-          x: rightX, y: labelY, size: 8, font: fonts.bold, color: colors.muted
-        });
-        const leftHeight = dibujarTexto(page, leftValue, leftX, labelY - 13, columnWidth, fonts.regular, 11, colors.text);
-        const rightHeight = dibujarTexto(page, rightValue, rightX, labelY - 13, columnWidth, fonts.regular, 11, colors.text);
-        cursorY = labelY - 13 - Math.max(leftHeight, rightHeight) - sectionGap;
-      };
-
-      drawPairedFields('Cliente', guia.nombreCliente, 'Vendedor', guia.nombreVendedor);
-      drawPairedFields('Teléfono cliente', guia.telefonoCliente, 'Teléfono vendedor', guia.telefonoVendedor);
-      drawField('Dirección cliente', guia.direccionCliente, 11);
-      drawField('Documento', guia.numeroDocumento, 13);
-
+      page.drawRectangle({ x: x + 58, y: y + 295, width: 154, height: 33, color: colors.paper });
+      dibujarTexto(page, `GUÍA: ${numeroGuiaVisible}`, x, y + 300.04, width, fonts.bold, 24, colors.orange, true, 1);
+      page.drawRectangle({ x: x + 60, y: y + 43, width: 150, height: 20, color: colors.paper });
       const etiquetaBultos = guia.numeroBultos === 1 ? 'BULTO' : 'BULTOS';
-      dibujarTexto(page, `${etiquetaBultos} (${guia.numeroBultos})`, x + inset, y + 41, contentWidth, fonts.bold, 13, colors.muted, true);
-      dibujarTexto(page, `${guia.bulto}/${guia.numeroBultos}`, x + inset, y + 9, contentWidth, fonts.bold, 32, colors.text, true);
+      dibujarTexto(page, `${etiquetaBultos} (${guia.numeroBultos})`, x, y + 48, width, fonts.bold, 14, colors.text, true, 1);
+      page.drawRectangle({ x: x + 60, y: y + 8, width: 150, height: 40, color: colors.paper });
+      dibujarTexto(page, `${guia.bulto}/${guia.numeroBultos}`, x, y + 16.54, width, fonts.bold, 32, colors.orange, true, 1);
+
+      dibujarValor(guia.nombreCliente, x + 15.77, y + 250, 112, y + 248, 12, fonts.regular, 12, 1);
+      dibujarValor(guia.nombreVendedor, x + 141, y + 250, 112, y + 248, 12, fonts.regular, 12, 1);
+      dibujarValor(guia.telefonoCliente, x + 15.77, y + 213.07, 112, y + 211, 12, fonts.regular, 12, 1);
+      dibujarValor(guia.telefonoVendedor, x + 141, y + 213.02, 112, y + 211, 12, fonts.regular, 12, 1);
+      dibujarValor(guia.numeroDocumento, x + 15.77, y + 176.04, 234, y + 174, 12, fonts.regular, 12, 1);
+      dibujarValor(guia.direccionCliente, x + 15.77, y + 135.53, 234, y + 72, 76, fonts.regular, 12, 5);
     }
 
     function dibujarResumenRespaldo(page, guia, fonts, colors) {
@@ -834,8 +823,8 @@
         borderColor: colors.border,
         borderWidth: 1.2
       });
-      dibujarTexto(page, 'LIMZA GROUP C.A. | 0414-4238533', innerX, 718 - verticalOffset, innerWidth, fonts.bold, 14, colors.muted, true);
-      dibujarTexto(page, 'COPIA DE RESPALDO', innerX, 685 - verticalOffset, innerWidth, fonts.bold, 22, colors.orange, true);
+      dibujarTexto(page, 'LIMZA GROUP C.A. | 0414-4238533', innerX, 710, innerWidth, fonts.bold, 12, colors.text, true);
+      dibujarTexto(page, 'COPIA DE RESPALDO', innerX, 660, innerWidth, fonts.bold, 22, colors.text, true);
       page.drawLine({
         start: { x: innerX, y: 660 - verticalOffset },
         end: { x: innerX + innerWidth, y: 660 - verticalOffset },
@@ -934,11 +923,23 @@
         start: { x: innerX, y: 202 - verticalOffset },
         end: { x: innerX + innerWidth, y: 202 - verticalOffset },
         thickness: 1.2,
-        color: colors.orange
+        color: colors.border
       });
       const etiquetaTotalBultos = guia.numeroBultos === 1 ? 'TOTAL DE BULTO' : 'TOTAL DE BULTOS';
-      dibujarTexto(page, etiquetaTotalBultos, innerX, 174 - verticalOffset, innerWidth, fonts.bold, 13, colors.muted, true);
-      dibujarTexto(page, String(guia.numeroBultos), innerX, 118 - verticalOffset, innerWidth, fonts.bold, 38, colors.orange, true);
+      dibujarTexto(page, etiquetaTotalBultos, innerX, 174 - verticalOffset, innerWidth, fonts.bold, 13, colors.text, true);
+      dibujarTexto(page, String(guia.numeroBultos), innerX, 118 - verticalOffset, innerWidth, fonts.bold, 38, colors.text, true);
+    }
+
+    async function cargarPlantillaGuia(pdf) {
+      const respuesta = await fetch('plantilla-guia-despacho.pdf');
+      if (!respuesta.ok) throw new Error(`No se pudo cargar la plantilla de guías (${respuesta.status}).`);
+      const bytes = await respuesta.arrayBuffer();
+      const documentoPlantilla = await PDFLib.PDFDocument.load(bytes);
+      const [plantilla] = await pdf.embedPages(
+        [documentoPlantilla.getPage(0)],
+        [{ left: 30, bottom: 402, right: 300, top: 762 }]
+      );
+      return plantilla;
     }
 
     async function generarPdfGuias(guia) {
@@ -950,12 +951,15 @@
         regular: await pdf.embedFont(StandardFonts.Helvetica),
         bold: await pdf.embedFont(StandardFonts.HelveticaBold)
       };
+      const negro = rgb(0, 0, 0);
       const colors = {
-        text: rgb(15 / 255, 23 / 255, 42 / 255),
-        muted: rgb(71 / 255, 85 / 255, 105 / 255),
-        border: rgb(203 / 255, 213 / 255, 225 / 255),
-        orange: rgb(234 / 255, 88 / 255, 12 / 255)
+        text: negro,
+        muted: rgb(112 / 255, 112 / 255, 112 / 255),
+        border: negro,
+        orange: rgb(249 / 255, 115 / 255, 22 / 255),
+        paper: rgb(1, 1, 1)
       };
+      const plantilla = await cargarPlantillaGuia(pdf);
       const margin = 30;
       const gap = 12;
       const cardWidth = (612 - margin * 2 - gap) / 2;
@@ -970,7 +974,7 @@
         const page = pdf.addPage([612, 792]);
         const end = Math.min(start + positions.length - 1, guia.numeroBultos);
         for (let bulto = start; bulto <= end; bulto += 1) {
-          dibujarGuia(page, { ...guia, bulto }, positions[bulto - start], fonts, colors);
+          dibujarGuia(page, { ...guia, bulto }, positions[bulto - start], fonts, colors, plantilla);
         }
       }
       dibujarResumenRespaldo(pdf.addPage([612, 792]), guia, fonts, colors);
