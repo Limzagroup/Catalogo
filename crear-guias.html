@@ -159,6 +159,24 @@
       display: flex;
       justify-content: flex-end;
     }
+    .google-login-confirmation {
+      min-height: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 16px;
+      border: 1px solid #bbf7d0;
+      border-radius: 999px;
+      background: #f0fdf4;
+      color: #166534;
+      font-size: 0.9rem;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+    .google-login-confirmation[hidden] {
+      display: none;
+    }
     h1 {
       margin: 0;
       font-size: clamp(1.4rem, 3.5vw, 1.9rem);
@@ -180,6 +198,63 @@
     .outlined-field:focus-within {
       border-color: var(--brand-orange);
       box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.16);
+    }
+    #campoSeleccionCliente:focus-within {
+      z-index: 2;
+    }
+    .client-suggestions {
+      position: absolute;
+      z-index: 5;
+      top: calc(100% + 8px);
+      right: 0;
+      left: 0;
+      max-height: 280px;
+      margin: 0;
+      padding: 6px;
+      overflow-y: auto;
+      border: 1px solid #d6dde7;
+      border-radius: 12px;
+      background: #ffffff;
+      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
+      list-style: none;
+    }
+    .client-suggestions[hidden] {
+      display: none;
+    }
+    .client-suggestions button {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--text-main);
+      text-align: left;
+    }
+    .client-suggestions button:hover,
+    .client-suggestions button:focus-visible {
+      outline: none;
+      background: #fff7ed;
+    }
+    .client-suggestion-name {
+      min-width: 0;
+      overflow: hidden;
+      font-weight: 600;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .client-suggestion-document {
+      flex-shrink: 0;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+    .client-suggestions-empty {
+      padding: 10px 12px;
+      color: var(--text-muted);
+      font-size: 0.9rem;
     }
     .outlined-field .form-label {
       position: absolute;
@@ -208,6 +283,11 @@
     .outlined-field .form-control:focus {
       background: transparent;
       box-shadow: none;
+    }
+    #nombreCliente::-webkit-search-cancel-button {
+      -webkit-appearance: none;
+      appearance: none;
+      display: none;
     }
     .outlined-field textarea.form-control {
       min-height: 94px;
@@ -351,15 +431,18 @@
           </div>
         </div>
         <div id="botonGoogleGuias"></div>
+        <div id="estadoAccesoGoogleGuias" class="google-login-confirmation" role="status" aria-live="polite" hidden>
+          <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
+          <span>Sesión iniciada</span>
+        </div>
       </div>
       <form id="formularioGuias">
         <div class="row g-3">
           <div class="col-12 col-md-6">
-            <div class="outlined-field">
+            <div class="outlined-field" id="campoSeleccionCliente">
               <label class="form-label" for="nombreCliente">Seleccionar cliente</label>
-              <select class="form-control" id="nombreCliente" name="nombreCliente" required disabled>
-                <option value="">Inicia sesión para cargar clientes</option>
-              </select>
+              <input class="form-control" id="nombreCliente" name="nombreCliente" type="text" placeholder="Busca por nombre o RIF" autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="sugerenciasClientes" aria-expanded="false" required disabled>
+              <ul class="client-suggestions" id="sugerenciasClientes" role="listbox" aria-label="Clientes coincidentes" hidden></ul>
               <button class="clear-field" type="button" data-clear-for="nombreCliente" aria-label="Borrar nombre del cliente"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
             </div>
           </div>
@@ -429,14 +512,78 @@
     const estadoGuias = document.getElementById('estadoGuias');
     const estadoSesionGuias = document.getElementById('estadoSesionGuias');
     const botonGoogleGuias = document.getElementById('botonGoogleGuias');
+    const estadoAccesoGoogleGuias = document.getElementById('estadoAccesoGoogleGuias');
     const nombreClienteInput = document.getElementById('nombreCliente');
+    const sugerenciasClientes = document.getElementById('sugerenciasClientes');
     const numeroGuiaInput = document.getElementById('numeroGuia');
     const claveSiguienteNumeroGuia = 'limzagroupSiguienteNumeroGuia';
     const numeroGuiaInicial = 540;
     const pdfError = 'No se pudo generar el PDF. Recarga la página e inténtalo de nuevo.';
     let clientesGuias = [];
+    let clienteGuiaSeleccionado = null;
     let credencialGoogleGuias = '';
     let correlativoDisponible = true;
+
+    function normalizarBusquedaCliente(valor) {
+      return String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    }
+
+    function cerrarSugerenciasClientes() {
+      sugerenciasClientes.hidden = true;
+      nombreClienteInput.setAttribute('aria-expanded', 'false');
+    }
+
+    function completarDatosCliente(cliente) {
+      clienteGuiaSeleccionado = cliente;
+      if (cliente) nombreClienteInput.value = cliente.nombre;
+      document.getElementById('direccionCliente').value = cliente ? cliente.direccionCliente || '' : '';
+      document.getElementById('telefonoCliente').value = cliente ? cliente.telefonoCliente || '' : '';
+      document.getElementById('numeroDocumento').value = cliente ? cliente.numeroDocumento || '' : '';
+      document.getElementById('nombreVendedor').value = cliente ? cliente.nombreVendedor || '' : '';
+      document.getElementById('telefonoVendedor').value = cliente ? cliente.telefonoVendedor || '' : '';
+      cerrarSugerenciasClientes();
+    }
+
+    function mostrarSugerenciasClientes() {
+      const busqueda = normalizarBusquedaCliente(nombreClienteInput.value);
+      sugerenciasClientes.replaceChildren();
+      if (!busqueda) {
+        cerrarSugerenciasClientes();
+        return;
+      }
+
+      const coincidencias = clientesGuias
+        .map((cliente, indice) => ({ cliente, indice }))
+        .filter(({ cliente }) => normalizarBusquedaCliente(`${cliente.nombre} ${cliente.numeroDocumento}`).includes(busqueda))
+        .slice(0, 50);
+
+      if (!coincidencias.length) {
+        const vacio = document.createElement('li');
+        vacio.className = 'client-suggestions-empty';
+        vacio.textContent = 'No se encontraron clientes con ese nombre o RIF.';
+        sugerenciasClientes.appendChild(vacio);
+      } else {
+        coincidencias.forEach(({ cliente, indice }) => {
+          const item = document.createElement('li');
+          const opcion = document.createElement('button');
+          const nombre = document.createElement('span');
+          const documento = document.createElement('span');
+          opcion.type = 'button';
+          opcion.setAttribute('role', 'option');
+          opcion.dataset.indiceCliente = String(indice);
+          nombre.className = 'client-suggestion-name';
+          nombre.textContent = cliente.nombre;
+          documento.className = 'client-suggestion-document';
+          documento.textContent = cliente.numeroDocumento ? `RIF: ${cliente.numeroDocumento}` : '';
+          opcion.append(nombre, documento);
+          item.appendChild(opcion);
+          sugerenciasClientes.appendChild(item);
+        });
+      }
+
+      sugerenciasClientes.hidden = false;
+      nombreClienteInput.setAttribute('aria-expanded', 'true');
+    }
 
     function mostrarEstadoSesionGuias(mensaje, error = false) {
       estadoSesionGuias.textContent = mensaje;
@@ -464,14 +611,9 @@
         }
 
         clientesGuias = resultado.clientes.filter(cliente => cliente && String(cliente.nombre || '').trim());
-        nombreClienteInput.replaceChildren(new Option('Selecciona un cliente', ''));
-        clientesGuias.forEach((cliente, index) => {
-          const nombre = String(cliente.nombre).trim();
-          const documento = String(cliente.numeroDocumento || '').trim();
-          const opcion = new Option(documento ? `${nombre} - ${documento}` : nombre, nombre);
-          opcion.dataset.indiceCliente = String(index);
-          nombreClienteInput.add(opcion);
-        });
+        nombreClienteInput.value = '';
+        nombreClienteInput.placeholder = 'Escribe un nombre o RIF para buscar';
+        clienteGuiaSeleccionado = null;
         nombreClienteInput.disabled = clientesGuias.length === 0;
         if (!clientesGuias.length) {
           mostrarEstadoSesionGuias('No hay clientes disponibles en la pestaña CLIENTES.', true);
@@ -500,9 +642,13 @@
           throw new Error('La sesión de Google ya venció. Inicia sesión de nuevo.');
         }
         credencialGoogleGuias = respuesta.credential;
+        botonGoogleGuias.hidden = true;
+        estadoAccesoGoogleGuias.hidden = false;
         cargarClientesGuias(credencialGoogleGuias);
       } catch (error) {
         credencialGoogleGuias = '';
+        botonGoogleGuias.hidden = false;
+        estadoAccesoGoogleGuias.hidden = true;
         nombreClienteInput.disabled = true;
         mostrarEstadoSesionGuias(error.message || 'No se pudo validar la sesión de Google.', true);
       }
@@ -558,15 +704,29 @@
       });
     });
 
-    nombreClienteInput.addEventListener('change', () => {
-      const opcion = nombreClienteInput.selectedOptions[0];
-      const indice = Number(opcion && opcion.dataset.indiceCliente);
-      const cliente = Number.isInteger(indice) ? clientesGuias[indice] : null;
-      document.getElementById('direccionCliente').value = cliente ? cliente.direccionCliente || '' : '';
-      document.getElementById('telefonoCliente').value = cliente ? cliente.telefonoCliente || '' : '';
-      document.getElementById('numeroDocumento').value = cliente ? cliente.numeroDocumento || '' : '';
-      document.getElementById('nombreVendedor').value = cliente ? cliente.nombreVendedor || '' : '';
-      document.getElementById('telefonoVendedor').value = cliente ? cliente.telefonoVendedor || '' : '';
+    nombreClienteInput.addEventListener('input', () => {
+      clienteGuiaSeleccionado = null;
+      completarDatosCliente(null);
+      mostrarSugerenciasClientes();
+    });
+
+    nombreClienteInput.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        cerrarSugerenciasClientes();
+        return;
+      }
+      if (event.key === 'Enter' && !sugerenciasClientes.hidden) {
+        const primeraOpcion = sugerenciasClientes.querySelector('button[data-indice-cliente]');
+        if (primeraOpcion) {
+          event.preventDefault();
+          completarDatosCliente(clientesGuias[Number(primeraOpcion.dataset.indiceCliente)]);
+        }
+      }
+    });
+
+    sugerenciasClientes.addEventListener('click', event => {
+      const opcion = event.target.closest('button[data-indice-cliente]');
+      if (opcion) completarDatosCliente(clientesGuias[Number(opcion.dataset.indiceCliente)]);
     });
 
     window.addEventListener('load', inicializarGoogleGuias, { once: true });
@@ -826,6 +986,12 @@
       }
       if (!credencialGoogleGuias || !clientesGuias.length || nombreClienteInput.disabled) {
         mostrarEstadoSesionGuias('Inicia sesión con Google para cargar y seleccionar un cliente antes de generar la guía.', true);
+        return;
+      }
+      if (!clienteGuiaSeleccionado) {
+        estadoGuias.textContent = 'Busca y selecciona un cliente de la lista para completar sus datos.';
+        estadoGuias.className = 'status-message mt-3 mb-1 error';
+        nombreClienteInput.focus();
         return;
       }
       if (!formularioGuias.reportValidity()) return;
