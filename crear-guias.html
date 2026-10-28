@@ -434,6 +434,7 @@
         <div id="estadoAccesoGoogleGuias" class="google-login-confirmation" role="status" aria-live="polite" hidden>
           <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
           <span>Sesión iniciada</span>
+          <button type="button" id="cerrarSesionGoogleGuias" class="btn btn-sm btn-outline-danger ms-1">Cerrar sesión</button>
         </div>
       </div>
       <form id="formularioGuias">
@@ -513,10 +514,12 @@
     const estadoSesionGuias = document.getElementById('estadoSesionGuias');
     const botonGoogleGuias = document.getElementById('botonGoogleGuias');
     const estadoAccesoGoogleGuias = document.getElementById('estadoAccesoGoogleGuias');
+    const botonCerrarSesionGoogleGuias = document.getElementById('cerrarSesionGoogleGuias');
     const nombreClienteInput = document.getElementById('nombreCliente');
     const sugerenciasClientes = document.getElementById('sugerenciasClientes');
     const numeroGuiaInput = document.getElementById('numeroGuia');
     const claveSiguienteNumeroGuia = 'limzagroupSiguienteNumeroGuia';
+    const claveSesionGoogleGuias = 'limzagroupSesionGoogleGuias';
     const numeroGuiaInicial = 540;
     const pdfError = 'No se pudo generar el PDF. Recarga la página e inténtalo de nuevo.';
     let clientesGuias = [];
@@ -627,31 +630,54 @@
       }
     }
 
+    function validarCredencialGoogleGuias(credencial) {
+      const partes = String(credencial || '').split('.');
+      if (partes.length !== 3) throw new Error('Google no devolvió una credencial válida.');
+      const payloadCodificado = partes[1].replace(/-/g, '+').replace(/_/g, '/');
+      const payload = JSON.parse(atob(payloadCodificado.padEnd(Math.ceil(payloadCodificado.length / 4) * 4, '=')));
+      const correo = String(payload.email || '').trim().toLowerCase();
+      const expiracion = Number(payload.exp) * 1000;
+      if (payload.email_verified !== true && String(payload.email_verified).toLowerCase() !== 'true') {
+        throw new Error(`Verifica el correo ${CORREO_AUTORIZADO_GUIAS} antes de continuar.`);
+      }
+      if (correo !== CORREO_AUTORIZADO_GUIAS) {
+        throw new Error(`Inicia sesión con ${CORREO_AUTORIZADO_GUIAS} para consultar los clientes.`);
+      }
+      if (!Number.isFinite(expiracion) || expiracion <= Date.now()) {
+        throw new Error('La sesión de Google ya venció. Inicia sesión de nuevo.');
+      }
+      return payload;
+    }
+
+    function activarSesionGoogleGuias(credencial, guardarSesion) {
+      validarCredencialGoogleGuias(credencial);
+      credencialGoogleGuias = credencial;
+      if (guardarSesion) localStorage.setItem(claveSesionGoogleGuias, credencial);
+      botonGoogleGuias.hidden = true;
+      estadoAccesoGoogleGuias.hidden = false;
+      cargarClientesGuias(credencialGoogleGuias);
+    }
+
     function recibirCredencialGoogleGuias(respuesta) {
       try {
-        const partes = String(respuesta.credential || '').split('.');
-        if (partes.length !== 3) throw new Error('Google no devolvió una credencial válida.');
-        const payloadCodificado = partes[1].replace(/-/g, '+').replace(/_/g, '/');
-        const payload = JSON.parse(atob(payloadCodificado.padEnd(Math.ceil(payloadCodificado.length / 4) * 4, '=')));
-        const correo = String(payload.email || '').trim().toLowerCase();
-        const expiracion = Number(payload.exp) * 1000;
-        if (String(payload.email_verified).toLowerCase() !== 'true' || correo !== CORREO_AUTORIZADO_GUIAS) {
-          throw new Error(`Inicia sesión con ${CORREO_AUTORIZADO_GUIAS} para consultar los clientes.`);
-        }
-        if (!Number.isFinite(expiracion) || expiracion <= Date.now()) {
-          throw new Error('La sesión de Google ya venció. Inicia sesión de nuevo.');
-        }
-        credencialGoogleGuias = respuesta.credential;
-        botonGoogleGuias.hidden = true;
-        estadoAccesoGoogleGuias.hidden = false;
-        cargarClientesGuias(credencialGoogleGuias);
+        activarSesionGoogleGuias(respuesta.credential, true);
       } catch (error) {
-        credencialGoogleGuias = '';
-        botonGoogleGuias.hidden = false;
-        estadoAccesoGoogleGuias.hidden = true;
-        nombreClienteInput.disabled = true;
+        cerrarSesionGoogleGuias();
         mostrarEstadoSesionGuias(error.message || 'No se pudo validar la sesión de Google.', true);
       }
+    }
+
+    function cerrarSesionGoogleGuias() {
+      localStorage.removeItem(claveSesionGoogleGuias);
+      credencialGoogleGuias = '';
+      clientesGuias = [];
+      clienteGuiaSeleccionado = null;
+      nombreClienteInput.value = '';
+      nombreClienteInput.disabled = true;
+      botonGoogleGuias.hidden = false;
+      estadoAccesoGoogleGuias.hidden = true;
+      if (window.google?.accounts?.id) window.google.accounts.id.disableAutoSelect();
+      mostrarEstadoSesionGuias('Sesión cerrada. Inicia sesión nuevamente para cargar los clientes.');
     }
 
     function inicializarGoogleGuias() {
@@ -672,6 +698,16 @@
         width: 180,
         logo_alignment: 'left'
       });
+
+      const sesionGuardada = localStorage.getItem(claveSesionGoogleGuias);
+      if (sesionGuardada) {
+        try {
+          activarSesionGoogleGuias(sesionGuardada, false);
+        } catch (error) {
+          cerrarSesionGoogleGuias();
+          mostrarEstadoSesionGuias(error.message || 'La sesión guardada ya no es válida. Inicia sesión nuevamente.', true);
+        }
+      }
     }
 
     function obtenerSiguienteNumeroGuia() {
@@ -729,6 +765,7 @@
       if (opcion) completarDatosCliente(clientesGuias[Number(opcion.dataset.indiceCliente)]);
     });
 
+    botonCerrarSesionGoogleGuias.addEventListener('click', cerrarSesionGoogleGuias);
     window.addEventListener('load', inicializarGoogleGuias, { once: true });
 
     function dibujarTexto(page, text, x, y, maxWidth, font, fontSize, color, centered = false, maxLines = Infinity) {
