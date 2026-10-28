@@ -444,13 +444,6 @@
           <button type="button" id="cerrarSesionGoogleGuias" class="btn btn-sm btn-outline-danger ms-1">Cerrar sesión</button>
         </div>
       </div>
-      <div class="pdf-folder-card d-flex align-items-center justify-content-between gap-3 mb-3">
-        <div>
-          <p class="google-login-title mb-1">Guardar PDF automáticamente</p>
-          <p id="estadoCarpetaPdf" class="google-login-status mb-0">Selecciona la carpeta donde se guardarán las guías.</p>
-        </div>
-        <button type="button" id="seleccionarCarpetaPdf" class="btn btn-outline-dark flex-shrink-0">Seleccionar carpeta</button>
-      </div>
       <form id="formularioGuias">
         <div class="row g-3">
           <div class="col-12 col-md-6">
@@ -510,6 +503,13 @@
           </div>
         </div>
         <p id="estadoGuias" class="status-message mt-3 mb-1" role="status" aria-live="polite"></p>
+        <div class="pdf-folder-card d-flex align-items-center justify-content-between gap-3 mb-3">
+          <div>
+            <p class="google-login-title mb-1">Guardar PDF automáticamente</p>
+            <p id="estadoCarpetaPdf" class="google-login-status mb-0">Selecciona la carpeta donde se guardarán las guías.</p>
+          </div>
+          <button type="button" id="seleccionarCarpetaPdf" class="btn btn-outline-dark flex-shrink-0">Elegir carpeta</button>
+        </div>
         <button id="btnGenerarGuias" class="btn btn-primary w-100 mt-2" type="submit">
           <i class="bi bi-file-earmark-pdf me-2" aria-hidden="true"></i>Generar guías
         </button>
@@ -577,10 +577,12 @@
       return carpeta || null;
     }
 
-    async function pedirPermisoCarpeta(carpeta) {
+    async function pedirPermisoCarpeta(carpeta, permitirSolicitar = false) {
       if (!carpeta?.queryPermission || !carpeta?.requestPermission) return false;
       let permiso = await carpeta.queryPermission({ mode: 'readwrite' });
-      if (permiso !== 'granted') permiso = await carpeta.requestPermission({ mode: 'readwrite' });
+      if (permiso !== 'granted' && permitirSolicitar) {
+        permiso = await carpeta.requestPermission({ mode: 'readwrite' });
+      }
       return permiso === 'granted';
     }
 
@@ -591,8 +593,13 @@
       }
       try {
         carpetaPdfGuias = await window.showDirectoryPicker({ mode: 'readwrite' });
+        if (!await pedirPermisoCarpeta(carpetaPdfGuias, true)) {
+          estadoCarpetaPdf.textContent = 'Concede permiso de lectura y escritura en la ventana del navegador.';
+          return;
+        }
         await guardarCarpetaPdf(carpetaPdfGuias);
-        estadoCarpetaPdf.textContent = `Carpeta seleccionada: ${carpetaPdfGuias.name}`;
+        estadoCarpetaPdf.textContent = `Carpeta guardada: ${carpetaPdfGuias.name}`;
+        seleccionarCarpetaPdf.textContent = 'Cambiar carpeta';
       } catch (error) {
         if (error.name !== 'AbortError') {
           console.error('No se pudo seleccionar la carpeta de guías:', error);
@@ -603,13 +610,22 @@
 
     async function guardarPdfEnCarpeta(blob, nombreArchivo) {
       if (!window.showDirectoryPicker || !carpetaPdfGuias) return false;
-      const permisoConcedido = await pedirPermisoCarpeta(carpetaPdfGuias);
-      if (!permisoConcedido) return false;
-      const archivo = await carpetaPdfGuias.getFileHandle(nombreArchivo, { create: true });
-      const escritura = await archivo.createWritable();
-      await escritura.write(blob);
-      await escritura.close();
-      return true;
+      const permisoConcedido = await pedirPermisoCarpeta(carpetaPdfGuias, false);
+      if (!permisoConcedido) {
+        estadoCarpetaPdf.textContent = 'El permiso expiró. Pulsa Cambiar carpeta para autorizarla nuevamente.';
+        return false;
+      }
+      try {
+        const archivo = await carpetaPdfGuias.getFileHandle(nombreArchivo, { create: true });
+        const escritura = await archivo.createWritable();
+        await escritura.write(blob);
+        await escritura.close();
+        return true;
+      } catch (error) {
+        console.error('No se pudo escribir el PDF en la carpeta seleccionada:', error);
+        estadoCarpetaPdf.textContent = 'La carpeta no permite escribir. Selecciona otra carpeta local o sincronizada con OneDrive.';
+        return false;
+      }
     }
 
     function normalizarBusquedaCliente(valor) {
@@ -866,9 +882,11 @@
       if (!carpeta) return;
       carpetaPdfGuias = carpeta;
       if (await pedirPermisoCarpeta(carpeta)) {
-        estadoCarpetaPdf.textContent = `Carpeta seleccionada: ${carpeta.name}`;
+        estadoCarpetaPdf.textContent = `Carpeta guardada: ${carpeta.name}`;
+        seleccionarCarpetaPdf.textContent = 'Cambiar carpeta';
       } else {
-        estadoCarpetaPdf.textContent = 'Selecciona nuevamente la carpeta para autorizar el guardado.';
+        estadoCarpetaPdf.textContent = `Carpeta guardada: ${carpeta.name}. Pulsa Cambiar carpeta para autorizarla nuevamente.`;
+        seleccionarCarpetaPdf.textContent = 'Cambiar carpeta';
       }
     }).catch(() => {});
     window.addEventListener('load', inicializarGoogleGuias, { once: true });
@@ -1218,8 +1236,8 @@
         }
         estadoGuias.textContent = guardadoEnCarpeta
           ? `PDF guardado automáticamente: ${nombreArchivo}`
-          : `PDF generado: ${guia.numeroBultos} guía(s) y una hoja de respaldo.`;
-        estadoGuias.className = 'status-message mt-3 mb-1 success';
+          : `${nombreArchivo} se descargó. La carpeta seleccionada no recibió el archivo; verifica el permiso o selecciónala nuevamente.`;
+        estadoGuias.className = `status-message mt-3 mb-1 ${guardadoEnCarpeta ? 'success' : 'error'}`;
       } catch (error) {
         console.error('Error al generar las guías de envío:', error);
         estadoGuias.textContent = error instanceof Error && error.message.startsWith('El correlativo')
