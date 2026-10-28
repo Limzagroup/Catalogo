@@ -519,6 +519,7 @@
     const sugerenciasClientes = document.getElementById('sugerenciasClientes');
     const numeroGuiaInput = document.getElementById('numeroGuia');
     const claveSiguienteNumeroGuia = 'limzagroupSiguienteNumeroGuia';
+    const claveUltimaGuiaGenerada = 'limzagroupUltimaGuiaGenerada';
     const claveSesionGoogleGuias = 'limzagroupSesionGoogleGuias';
     const numeroGuiaInicial = 540;
     const pdfError = 'No se pudo generar el PDF. Recarga la página e inténtalo de nuevo.';
@@ -710,14 +711,24 @@
       }
     }
 
-    function obtenerSiguienteNumeroGuia() {
-      const guardado = localStorage.getItem(claveSiguienteNumeroGuia);
-      if (guardado === null) return numeroGuiaInicial;
+    function leerNumeroGuardado(clave) {
+      const guardado = localStorage.getItem(clave);
+      if (guardado === null || guardado.trim() === '') return null;
       const numero = Number(guardado);
       if (!Number.isSafeInteger(numero) || numero < numeroGuiaInicial) {
         throw new Error('El correlativo guardado para las guías no es válido.');
       }
       return numero;
+    }
+
+    function obtenerSiguienteNumeroGuia() {
+      const siguiente = leerNumeroGuardado(claveSiguienteNumeroGuia);
+      const ultimaGenerada = leerNumeroGuardado(claveUltimaGuiaGenerada);
+      if (siguiente === null && ultimaGenerada === null) return numeroGuiaInicial;
+
+      // La última guía generada también sirve como respaldo si se elimina o cambia
+      // la clave principal, evitando que el correlativo vuelva hacia atrás.
+      return Math.max(siguiente || 0, ultimaGenerada ? ultimaGenerada + 1 : 0, numeroGuiaInicial);
     }
 
     try {
@@ -1037,6 +1048,13 @@
         estadoGuias.className = 'status-message mt-3 mb-1 error';
         return;
       }
+      const numeroActualDisponible = obtenerSiguienteNumeroGuia();
+      const numeroGuiaIngresado = Number(guia.numeroGuia);
+      if (numeroActualDisponible > numeroGuiaIngresado) {
+        guia.numeroGuia = String(numeroActualDisponible);
+        numeroGuiaInput.value = String(numeroActualDisponible);
+      }
+
       if (!credencialGoogleGuias || !clientesGuias.length || nombreClienteInput.disabled) {
         mostrarEstadoSesionGuias('Inicia sesión con Google para cargar y seleccionar un cliente antes de generar la guía.', true);
         return;
@@ -1071,11 +1089,17 @@
       estadoGuias.className = 'status-message mt-3 mb-1';
       try {
         const bytes = await generarPdfGuias(guia);
-        const siguienteNumero = Number(guia.numeroGuia) + 1;
+        const numeroGenerado = Number(guia.numeroGuia);
+        const siguienteNumero = numeroGenerado + 1;
         if (!Number.isSafeInteger(siguienteNumero)) {
           throw new Error('El correlativo de las guías alcanzó el límite permitido.');
         }
+
+        localStorage.setItem(claveUltimaGuiaGenerada, String(numeroGenerado));
         localStorage.setItem(claveSiguienteNumeroGuia, String(siguienteNumero));
+        if (Number(localStorage.getItem(claveSiguienteNumeroGuia)) !== siguienteNumero) {
+          throw new Error('El navegador no pudo guardar el correlativo de la próxima guía.');
+        }
         numeroGuiaInput.value = String(siguienteNumero);
         const blob = new Blob([bytes], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
