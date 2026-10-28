@@ -602,8 +602,8 @@
         seleccionarCarpetaPdf.textContent = 'Cambiar carpeta';
       } catch (error) {
         if (error.name !== 'AbortError') {
-          console.error('No se pudo seleccionar la carpeta de guías:', error);
-          estadoCarpetaPdf.textContent = 'No se pudo seleccionar la carpeta.';
+          console.error('No se pudo guardar la carpeta seleccionada:', error);
+          estadoCarpetaPdf.textContent = 'No se pudo guardar la carpeta seleccionada.';
         }
       }
     }
@@ -612,7 +612,7 @@
       if (!window.showDirectoryPicker || !carpetaPdfGuias) return false;
       const permisoConcedido = await pedirPermisoCarpeta(carpetaPdfGuias, false);
       if (!permisoConcedido) {
-        estadoCarpetaPdf.textContent = 'El permiso expiró. Pulsa Cambiar carpeta para autorizarla nuevamente.';
+        estadoCarpetaPdf.textContent = 'Pulsa Cambiar carpeta para autorizar el guardado.';
         return false;
       }
       try {
@@ -623,7 +623,7 @@
         return true;
       } catch (error) {
         console.error('No se pudo escribir el PDF en la carpeta seleccionada:', error);
-        estadoCarpetaPdf.textContent = 'La carpeta no permite escribir. Selecciona otra carpeta local o sincronizada con OneDrive.';
+        estadoCarpetaPdf.textContent = 'No se pudo guardar el PDF en la carpeta seleccionada.';
         return false;
       }
     }
