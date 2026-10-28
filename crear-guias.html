@@ -112,6 +112,12 @@
       border-radius: 16px;
       background: linear-gradient(110deg, #fffaf5, #f8fafc 68%);
     }
+    .pdf-folder-card {
+      padding: 14px 20px;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      background: #fff;
+    }
     .google-login-copy {
       display: flex;
       align-items: flex-start;
@@ -366,7 +372,8 @@
         margin-bottom: 22px;
         padding-bottom: 18px;
       }
-      .google-login-card {
+      .google-login-card,
+      .pdf-folder-card {
         align-items: flex-start;
         flex-direction: column;
         gap: 12px;
@@ -437,6 +444,13 @@
           <button type="button" id="cerrarSesionGoogleGuias" class="btn btn-sm btn-outline-danger ms-1">Cerrar sesión</button>
         </div>
       </div>
+      <div class="pdf-folder-card d-flex align-items-center justify-content-between gap-3 mb-3">
+        <div>
+          <p class="google-login-title mb-1">Guardar PDF automáticamente</p>
+          <p id="estadoCarpetaPdf" class="google-login-status mb-0">Selecciona la carpeta donde se guardarán las guías.</p>
+        </div>
+        <button type="button" id="seleccionarCarpetaPdf" class="btn btn-outline-dark flex-shrink-0">Seleccionar carpeta</button>
+      </div>
       <form id="formularioGuias">
         <div class="row g-3">
           <div class="col-12 col-md-6">
@@ -497,7 +511,7 @@
         </div>
         <p id="estadoGuias" class="status-message mt-3 mb-1" role="status" aria-live="polite"></p>
         <button id="btnGenerarGuias" class="btn btn-primary w-100 mt-2" type="submit">
-          <i class="bi bi-file-earmark-pdf me-2" aria-hidden="true"></i>Generar PDF de guías
+          <i class="bi bi-file-earmark-pdf me-2" aria-hidden="true"></i>Generar guías
         </button>
       </form>
     </section>
@@ -515,6 +529,8 @@
     const botonGoogleGuias = document.getElementById('botonGoogleGuias');
     const estadoAccesoGoogleGuias = document.getElementById('estadoAccesoGoogleGuias');
     const botonCerrarSesionGoogleGuias = document.getElementById('cerrarSesionGoogleGuias');
+    const seleccionarCarpetaPdf = document.getElementById('seleccionarCarpetaPdf');
+    const estadoCarpetaPdf = document.getElementById('estadoCarpetaPdf');
     const nombreClienteInput = document.getElementById('nombreCliente');
     const sugerenciasClientes = document.getElementById('sugerenciasClientes');
     const numeroGuiaInput = document.getElementById('numeroGuia');
@@ -527,6 +543,74 @@
     let clienteGuiaSeleccionado = null;
     let credencialGoogleGuias = '';
     let correlativoDisponible = true;
+    let carpetaPdfGuias = null;
+    const BD_CARPETA_PDF = 'limzagroupGuias';
+
+    function abrirBaseDatosCarpeta() {
+      return new Promise((resolve, reject) => {
+        const solicitud = indexedDB.open(BD_CARPETA_PDF, 1);
+        solicitud.onupgradeneeded = () => solicitud.result.createObjectStore('configuracion');
+        solicitud.onsuccess = () => resolve(solicitud.result);
+        solicitud.onerror = () => reject(solicitud.error);
+      });
+    }
+
+    async function guardarCarpetaPdf(carpeta) {
+      const bd = await abrirBaseDatosCarpeta();
+      await new Promise((resolve, reject) => {
+        const transaccion = bd.transaction('configuracion', 'readwrite');
+        transaccion.objectStore('configuracion').put(carpeta, 'directorioPdfGuias');
+        transaccion.oncomplete = resolve;
+        transaccion.onerror = () => reject(transaccion.error);
+      });
+      bd.close();
+    }
+
+    async function recuperarCarpetaPdf() {
+      const bd = await abrirBaseDatosCarpeta();
+      const carpeta = await new Promise((resolve, reject) => {
+        const solicitud = bd.transaction('configuracion', 'readonly').objectStore('configuracion').get('directorioPdfGuias');
+        solicitud.onsuccess = () => resolve(solicitud.result);
+        solicitud.onerror = () => reject(solicitud.error);
+      });
+      bd.close();
+      return carpeta || null;
+    }
+
+    async function pedirPermisoCarpeta(carpeta) {
+      if (!carpeta?.queryPermission || !carpeta?.requestPermission) return false;
+      let permiso = await carpeta.queryPermission({ mode: 'readwrite' });
+      if (permiso !== 'granted') permiso = await carpeta.requestPermission({ mode: 'readwrite' });
+      return permiso === 'granted';
+    }
+
+    async function seleccionarCarpetaGuias() {
+      if (!window.showDirectoryPicker) {
+        estadoCarpetaPdf.textContent = 'Esta función requiere Google Chrome o Microsoft Edge actualizado.';
+        return;
+      }
+      try {
+        carpetaPdfGuias = await window.showDirectoryPicker({ mode: 'readwrite' });
+        await guardarCarpetaPdf(carpetaPdfGuias);
+        estadoCarpetaPdf.textContent = `Carpeta seleccionada: ${carpetaPdfGuias.name}`;
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          console.error('No se pudo seleccionar la carpeta de guías:', error);
+          estadoCarpetaPdf.textContent = 'No se pudo seleccionar la carpeta.';
+        }
+      }
+    }
+
+    async function guardarPdfEnCarpeta(blob, nombreArchivo) {
+      if (!window.showDirectoryPicker || !carpetaPdfGuias) return false;
+      const permisoConcedido = await pedirPermisoCarpeta(carpetaPdfGuias);
+      if (!permisoConcedido) return false;
+      const archivo = await carpetaPdfGuias.getFileHandle(nombreArchivo, { create: true });
+      const escritura = await archivo.createWritable();
+      await escritura.write(blob);
+      await escritura.close();
+      return true;
+    }
 
     function normalizarBusquedaCliente(valor) {
       return String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -777,6 +861,16 @@
     });
 
     botonCerrarSesionGoogleGuias.addEventListener('click', cerrarSesionGoogleGuias);
+    seleccionarCarpetaPdf.addEventListener('click', seleccionarCarpetaGuias);
+    recuperarCarpetaPdf().then(async carpeta => {
+      if (!carpeta) return;
+      carpetaPdfGuias = carpeta;
+      if (await pedirPermisoCarpeta(carpeta)) {
+        estadoCarpetaPdf.textContent = `Carpeta seleccionada: ${carpeta.name}`;
+      } else {
+        estadoCarpetaPdf.textContent = 'Selecciona nuevamente la carpeta para autorizar el guardado.';
+      }
+    }).catch(() => {});
     window.addEventListener('load', inicializarGoogleGuias, { once: true });
 
     function dibujarTexto(page, text, x, y, maxWidth, font, fontSize, color, centered = false, maxLines = Infinity) {
@@ -1102,8 +1196,6 @@
         }
         numeroGuiaInput.value = String(siguienteNumero);
         const blob = new Blob([bytes], { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
-        const enlace = document.createElement('a');
         const limpiarNombreArchivo = valor => valor
           .normalize('NFD')
           .replace(/[\u0300-\u036f]/g, '')
@@ -1111,13 +1203,22 @@
           .replace(/^-+|-+$/g, '');
         const numeroSeguro = String(guia.numeroGuia).padStart(6, '0');
         const clienteSeguro = limpiarNombreArchivo(guia.nombreCliente) || 'cliente';
-        enlace.href = url;
-        enlace.download = `GUIA DESPACHO CAJAS ${numeroSeguro} ${clienteSeguro}.pdf`;
-        document.body.appendChild(enlace);
-        enlace.click();
-        enlace.remove();
-        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-        estadoGuias.textContent = `PDF generado: ${guia.numeroBultos} guía(s) y una hoja de respaldo.`;
+        const nombreArchivo = `GUIA DESPACHO CAJAS ${numeroSeguro} ${clienteSeguro}.pdf`;
+        const guardadoEnCarpeta = await guardarPdfEnCarpeta(blob, nombreArchivo);
+
+        if (!guardadoEnCarpeta) {
+          const url = URL.createObjectURL(blob);
+          const enlace = document.createElement('a');
+          enlace.href = url;
+          enlace.download = nombreArchivo;
+          document.body.appendChild(enlace);
+          enlace.click();
+          enlace.remove();
+          window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }
+        estadoGuias.textContent = guardadoEnCarpeta
+          ? `PDF guardado automáticamente: ${nombreArchivo}`
+          : `PDF generado: ${guia.numeroBultos} guía(s) y una hoja de respaldo.`;
         estadoGuias.className = 'status-message mt-3 mb-1 success';
       } catch (error) {
         console.error('Error al generar las guías de envío:', error);
