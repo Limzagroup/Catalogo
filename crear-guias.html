@@ -491,7 +491,7 @@
           </div>
           <div class="col-md-6">
             <div class="outlined-field">
-              <label class="form-label" for="numeroGuia">Número de guía</label>
+              <label class="form-label" for="numeroGuia">Número de guía (correlativo compartido)</label>
               <input class="form-control" id="numeroGuia" name="numeroGuia" type="number" min="540" step="1" readonly required>
             </div>
           </div>
@@ -505,8 +505,8 @@
         <p id="estadoGuias" class="status-message mt-3 mb-1" role="status" aria-live="polite"></p>
         <div class="pdf-folder-card d-flex align-items-center justify-content-between gap-3 mb-3">
           <div>
-            <p class="google-login-title mb-1">Guardar PDF automáticamente</p>
-            <p id="estadoCarpetaPdf" class="google-login-status mb-0">Selecciona la carpeta donde se guardarán las guías.</p>
+            <p class="google-login-title mb-1">Destino de las guías PDF</p>
+            <p id="estadoCarpetaPdf" class="google-login-status mb-0">Elige una carpeta para guardar automáticamente o selecciona dónde guardar cada PDF al generarlo.</p>
           </div>
           <button type="button" id="seleccionarCarpetaPdf" class="btn btn-outline-dark flex-shrink-0">Elegir carpeta</button>
         </div>
@@ -534,15 +534,13 @@
     const nombreClienteInput = document.getElementById('nombreCliente');
     const sugerenciasClientes = document.getElementById('sugerenciasClientes');
     const numeroGuiaInput = document.getElementById('numeroGuia');
-    const claveSiguienteNumeroGuia = 'limzagroupSiguienteNumeroGuia';
-    const claveUltimaGuiaGenerada = 'limzagroupUltimaGuiaGenerada';
     const claveSesionGoogleGuias = 'limzagroupSesionGoogleGuias';
     const numeroGuiaInicial = 540;
     const pdfError = 'No se pudo generar el PDF. Recarga la página e inténtalo de nuevo.';
     let clientesGuias = [];
     let clienteGuiaSeleccionado = null;
     let credencialGoogleGuias = '';
-    let correlativoDisponible = true;
+    let correlativoDisponible = false;
     let carpetaPdfGuias = null;
     const BD_CARPETA_PDF = 'limzagroupGuias';
 
@@ -626,6 +624,17 @@
         estadoCarpetaPdf.textContent = 'No se pudo guardar el PDF en la carpeta seleccionada.';
         return false;
       }
+    }
+
+    function crearNombreArchivoGuia(guia) {
+      const limpiarNombreArchivo = valor => valor
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9_-]+/gi, '-')
+        .replace(/^-+|-+$/g, '');
+      const numeroSeguro = String(guia.numeroGuia).padStart(6, '0');
+      const clienteSeguro = limpiarNombreArchivo(guia.nombreCliente) || 'cliente';
+      return `GUIA DESPACHO CAJAS ${numeroSeguro} ${clienteSeguro}.pdf`;
     }
 
     function normalizarBusquedaCliente(valor) {
@@ -714,6 +723,9 @@
           throw new Error(resultado.mensaje || 'No se pudieron cargar los clientes.');
         }
 
+        const correlativo = await solicitarCorrelativoGuia('obtenerCorrelativoGuia', idToken);
+        numeroGuiaInput.value = String(correlativo);
+        correlativoDisponible = true;
         clientesGuias = resultado.clientes.filter(cliente => cliente && String(cliente.nombre || '').trim());
         nombreClienteInput.value = '';
         nombreClienteInput.placeholder = 'Escribe un nombre o RIF para buscar';
@@ -727,8 +739,32 @@
       } catch (error) {
         console.error('Error al cargar clientes para las guías:', error);
         credencialGoogleGuias = '';
+        correlativoDisponible = false;
         mostrarEstadoSesionGuias(error.message || 'No se pudieron cargar los clientes. Inténtalo de nuevo.', true);
+        estadoGuias.textContent = 'No se pudo consultar el correlativo compartido de las guías. Inténtalo de nuevo.';
+        estadoGuias.className = 'status-message mt-3 mb-1 error';
       }
+    }
+
+    async function solicitarCorrelativoGuia(action, idToken) {
+      const respuesta = await fetch(URL_API_GUIAS, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8', 'Accept': 'application/json' },
+        body: JSON.stringify({ action, idToken })
+      });
+      const texto = await respuesta.text();
+      let resultado;
+      try {
+        resultado = JSON.parse(texto);
+      } catch (error) {
+        throw new Error('El servidor no devolvió JSON válido para el correlativo. Comprueba que el Apps Script esté publicado.');
+      }
+      const correlativo = Number(resultado.correlativo);
+      if (!respuesta.ok || !resultado.exito ||
+          !Number.isSafeInteger(correlativo) || correlativo < numeroGuiaInicial) {
+        throw new Error(resultado.mensaje || 'No se pudo obtener el correlativo compartido.');
+      }
+      return correlativo;
     }
 
     function validarCredencialGoogleGuias(credencial) {
@@ -773,6 +809,7 @@
       credencialGoogleGuias = '';
       clientesGuias = [];
       clienteGuiaSeleccionado = null;
+      correlativoDisponible = false;
       nombreClienteInput.value = '';
       nombreClienteInput.disabled = true;
       botonGoogleGuias.hidden = false;
@@ -809,35 +846,6 @@
           mostrarEstadoSesionGuias(error.message || 'La sesión guardada ya no es válida. Inicia sesión nuevamente.', true);
         }
       }
-    }
-
-    function leerNumeroGuardado(clave) {
-      const guardado = localStorage.getItem(clave);
-      if (guardado === null || guardado.trim() === '') return null;
-      const numero = Number(guardado);
-      if (!Number.isSafeInteger(numero) || numero < numeroGuiaInicial) {
-        throw new Error('El correlativo guardado para las guías no es válido.');
-      }
-      return numero;
-    }
-
-    function obtenerSiguienteNumeroGuia() {
-      const siguiente = leerNumeroGuardado(claveSiguienteNumeroGuia);
-      const ultimaGenerada = leerNumeroGuardado(claveUltimaGuiaGenerada);
-      if (siguiente === null && ultimaGenerada === null) return numeroGuiaInicial;
-
-      // La última guía generada también sirve como respaldo si se elimina o cambia
-      // la clave principal, evitando que el correlativo vuelva hacia atrás.
-      return Math.max(siguiente || 0, ultimaGenerada ? ultimaGenerada + 1 : 0, numeroGuiaInicial);
-    }
-
-    try {
-      numeroGuiaInput.value = String(obtenerSiguienteNumeroGuia());
-    } catch (error) {
-      correlativoDisponible = false;
-      console.error('No se pudo cargar el correlativo de las guías:', error);
-      estadoGuias.textContent = 'No se pudo cargar el correlativo de las guías. Recarga la página e inténtalo de nuevo.';
-      estadoGuias.className = 'status-message mt-3 mb-1 error';
     }
 
     document.querySelectorAll('.clear-field').forEach(button => {
@@ -1160,12 +1168,6 @@
         estadoGuias.className = 'status-message mt-3 mb-1 error';
         return;
       }
-      const numeroActualDisponible = obtenerSiguienteNumeroGuia();
-      const numeroGuiaIngresado = Number(guia.numeroGuia);
-      if (numeroActualDisponible > numeroGuiaIngresado) {
-        guia.numeroGuia = String(numeroActualDisponible);
-        numeroGuiaInput.value = String(numeroActualDisponible);
-      }
 
       if (!credencialGoogleGuias || !clientesGuias.length || nombreClienteInput.disabled) {
         mostrarEstadoSesionGuias('Inicia sesión con Google para cargar y seleccionar un cliente antes de generar la guía.', true);
@@ -1196,10 +1198,40 @@
         estadoGuias.className = 'status-message mt-3 mb-1 error';
         return;
       }
+      const nombreArchivoSugerido = crearNombreArchivoGuia(guia);
+      let archivoElegido = null;
+      if (!carpetaPdfGuias && window.showSaveFilePicker) {
+        try {
+          archivoElegido = await window.showSaveFilePicker({
+            suggestedName: nombreArchivoSugerido,
+            types: [{ description: 'Archivo PDF', accept: { 'application/pdf': ['.pdf'] } }]
+          });
+        } catch (error) {
+          if (error.name === 'AbortError') {
+            estadoGuias.textContent = 'Guardado cancelado; no se generó la guía.';
+            estadoGuias.className = 'status-message mt-3 mb-1';
+            return;
+          }
+          console.error('No se pudo abrir el selector de ubicación del PDF:', error);
+          estadoGuias.textContent = 'No se pudo elegir dónde guardar el PDF. Inténtalo nuevamente o selecciona una carpeta.';
+          estadoGuias.className = 'status-message mt-3 mb-1 error';
+          return;
+        }
+      }
+
       botonGenerarGuias.disabled = true;
       estadoGuias.textContent = 'Generando PDF…';
       estadoGuias.className = 'status-message mt-3 mb-1';
       try {
+        let numeroReservado;
+        try {
+          numeroReservado = await solicitarCorrelativoGuia('reservarCorrelativoGuia', credencialGoogleGuias);
+        } catch (error) {
+          throw new Error(`No se pudo reservar el correlativo compartido: ${error.message}`);
+        }
+        guia.numeroGuia = String(numeroReservado);
+        numeroGuiaInput.value = String(numeroReservado);
+        const nombreArchivo = crearNombreArchivoGuia(guia);
         const bytes = await generarPdfGuias(guia);
         const numeroGenerado = Number(guia.numeroGuia);
         const siguienteNumero = numeroGenerado + 1;
@@ -1207,24 +1239,20 @@
           throw new Error('El correlativo de las guías alcanzó el límite permitido.');
         }
 
-        localStorage.setItem(claveUltimaGuiaGenerada, String(numeroGenerado));
-        localStorage.setItem(claveSiguienteNumeroGuia, String(siguienteNumero));
-        if (Number(localStorage.getItem(claveSiguienteNumeroGuia)) !== siguienteNumero) {
-          throw new Error('El navegador no pudo guardar el correlativo de la próxima guía.');
-        }
-        numeroGuiaInput.value = String(siguienteNumero);
         const blob = new Blob([bytes], { type: 'application/pdf' });
-        const limpiarNombreArchivo = valor => valor
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '')
-          .replace(/[^a-z0-9_-]+/gi, '-')
-          .replace(/^-+|-+$/g, '');
-        const numeroSeguro = String(guia.numeroGuia).padStart(6, '0');
-        const clienteSeguro = limpiarNombreArchivo(guia.nombreCliente) || 'cliente';
-        const nombreArchivo = `GUIA DESPACHO CAJAS ${numeroSeguro} ${clienteSeguro}.pdf`;
-        const guardadoEnCarpeta = await guardarPdfEnCarpeta(blob, nombreArchivo);
-
-        if (!guardadoEnCarpeta) {
+        let mensajeGuardado;
+        if (archivoElegido) {
+          const escritura = await archivoElegido.createWritable();
+          await escritura.write(blob);
+          await escritura.close();
+          mensajeGuardado = `PDF guardado en la ubicación elegida: ${nombreArchivo}`;
+        } else if (carpetaPdfGuias) {
+          const guardadoEnCarpeta = await guardarPdfEnCarpeta(blob, nombreArchivo);
+          if (!guardadoEnCarpeta) {
+            throw new Error('No se pudo guardar el PDF en la carpeta elegida. Autoriza nuevamente o selecciona otra carpeta.');
+          }
+          mensajeGuardado = `PDF guardado automáticamente en ${carpetaPdfGuias.name}: ${nombreArchivo}`;
+        } else {
           const url = URL.createObjectURL(blob);
           const enlace = document.createElement('a');
           enlace.href = url;
@@ -1233,16 +1261,27 @@
           enlace.click();
           enlace.remove();
           window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+          mensajeGuardado = `${nombreArchivo} se descargó. Revisa la ubicación de descargas configurada en el navegador.`;
         }
-        estadoGuias.textContent = guardadoEnCarpeta
-          ? `PDF guardado automáticamente: ${nombreArchivo}`
-          : `${nombreArchivo} se descargó. La carpeta seleccionada no recibió el archivo; verifica el permiso o selecciónala nuevamente.`;
-        estadoGuias.className = `status-message mt-3 mb-1 ${guardadoEnCarpeta ? 'success' : 'error'}`;
+
+        let avisoCorrelativo = '';
+        try {
+          numeroGuiaInput.value = String(await solicitarCorrelativoGuia('obtenerCorrelativoGuia', credencialGoogleGuias));
+        } catch (error) {
+          console.error('El PDF se guardó, pero no se pudo actualizar el correlativo mostrado:', error);
+          numeroGuiaInput.value = String(siguienteNumero);
+          avisoCorrelativo = ' El PDF se guardó, pero no se pudo actualizar el número mostrado; al generar otra guía se consultará el servidor.';
+        }
+        estadoGuias.textContent = mensajeGuardado + avisoCorrelativo;
+        estadoGuias.className = `status-message mt-3 mb-1 ${avisoCorrelativo ? 'error' : 'success'}`;
       } catch (error) {
         console.error('Error al generar las guías de envío:', error);
-        estadoGuias.textContent = error instanceof Error && error.message.startsWith('El correlativo')
-          ? error.message
-          : pdfError;
+        const mensajeError = error instanceof Error && (
+          error.message.startsWith('El correlativo') ||
+          error.message.startsWith('No se pudo reservar el correlativo compartido:') ||
+          error.message.startsWith('No se pudo guardar el PDF')
+        ) ? error.message : pdfError;
+        estadoGuias.textContent = mensajeError;
         estadoGuias.className = 'status-message mt-3 mb-1 error';
       } finally {
         botonGenerarGuias.disabled = false;
