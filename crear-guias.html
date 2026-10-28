@@ -799,8 +799,19 @@
       page.drawRectangle({ x: x + 60, y: y + 8, width: 150, height: 40, color: colors.paper });
       dibujarTexto(page, `${guia.bulto}/${guia.numeroBultos}`, x, y + 16.54, width, fonts.bold, 32, colors.orange, true, 1);
 
-      dibujarValor(guia.nombreCliente, x + 15.77, y + 250, 112, y + 248, 12, fonts.regular, 12, 1);
-      dibujarValor(guia.nombreVendedor, x + 141, y + 250, 112, y + 248, 12, fonts.regular, 12, 1);
+      page.drawRectangle({ x: x + 14.77, y: y + 248, width: 241, height: 12, color: colors.paper });
+      let tamanoNombreCliente = 12;
+      while (tamanoNombreCliente > 7 && fonts.regular.widthOfTextAtSize(guia.nombreCliente, tamanoNombreCliente) > 238) {
+        tamanoNombreCliente -= 0.5;
+      }
+      page.drawText(guia.nombreCliente, {
+        x: x + 15.77,
+        y: y + 250,
+        size: tamanoNombreCliente,
+        font: fonts.regular,
+        color: colors.text
+      });
+      dibujarValor(guia.nombreVendedor, x + 141, y + 175, 112, y + 173, 12, fonts.regular, 12, 1);
       dibujarValor(guia.telefonoCliente, x + 15.77, y + 213.07, 112, y + 211, 12, fonts.regular, 12, 1);
       dibujarValor(guia.telefonoVendedor, x + 141, y + 213.02, 112, y + 211, 12, fonts.regular, 12, 1);
       dibujarValor(guia.numeroDocumento, x + 15.77, y + 176.04, 234, y + 174, 12, fonts.regular, 12, 1);
