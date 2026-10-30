@@ -638,7 +638,7 @@
         }
         await guardarCarpetaPdf(carpetaPdfGuias);
         estadoCarpetaPdf.textContent = `Carpeta guardada: ${carpetaPdfGuias.name}`;
-        seleccionarCarpetaPdf.textContent = 'Cambiar carpeta';
+        seleccionarCarpetaPdf.textContent = 'Cambiar ruta';
       } catch (error) {
         if (error.name !== 'AbortError') {
           console.error('No se pudo guardar la carpeta seleccionada:', error);
@@ -651,7 +651,7 @@
       if (!window.showDirectoryPicker || !carpetaPdfGuias) return false;
       const permisoConcedido = await pedirPermisoCarpeta(carpetaPdfGuias, false);
       if (!permisoConcedido) {
-        estadoCarpetaPdf.textContent = 'Pulsa Cambiar carpeta para autorizar el guardado.';
+        estadoCarpetaPdf.textContent = 'Pulsa Cambiar ruta para autorizar el guardado.';
         return false;
       }
       try {
@@ -932,10 +932,10 @@
       carpetaPdfGuias = carpeta;
       if (await pedirPermisoCarpeta(carpeta)) {
         estadoCarpetaPdf.textContent = `Carpeta guardada: ${carpeta.name}`;
-        seleccionarCarpetaPdf.textContent = 'Cambiar carpeta';
+        seleccionarCarpetaPdf.textContent = 'Cambiar Ruta';
       } else {
-        estadoCarpetaPdf.textContent = `Carpeta guardada: ${carpeta.name}. Pulsa Cambiar carpeta para autorizarla nuevamente.`;
-        seleccionarCarpetaPdf.textContent = 'Cambiar carpeta';
+        estadoCarpetaPdf.textContent = `Carpeta guardada: ${carpeta.name}. Pulsa Cambiar Ruta para autorizarla nuevamente.`;
+        seleccionarCarpetaPdf.textContent = 'Cambiar Ruta';
       }
     }).catch(() => {});
     window.addEventListener('load', () => {
