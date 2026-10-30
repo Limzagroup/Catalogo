@@ -1005,10 +1005,9 @@
 
       page.drawRectangle({ x: x + 58, y: y + 295, width: 154, height: 33, color: colors.paper });
       dibujarTexto(page, `GUÍA: ${numeroGuiaVisible}`, x, y + 300.04, width, fonts.bold, 24, colors.orange, true, 1);
-      page.drawRectangle({ x: x + 60, y: y + 43, width: 150, height: 20, color: colors.paper });
+      page.drawRectangle({ x: x + 40, y: y + 4, width: 190, height: 64, color: colors.paper });
       const etiquetaBultos = guia.numeroBultos === 1 ? 'BULTO' : 'BULTOS';
-      dibujarTexto(page, `${etiquetaBultos} (${guia.numeroBultos})`, x, y + 48, width, fonts.bold, 14, colors.text, true, 1);
-      page.drawRectangle({ x: x + 60, y: y + 8, width: 150, height: 40, color: colors.paper });
+      dibujarTexto(page, `${etiquetaBultos} (${guia.numeroBultos})`, x, y + 53, width, fonts.bold, 14, colors.text, true, 1);
       dibujarTexto(page, `${guia.bulto}/${guia.numeroBultos}`, x, y + 16.54, width, fonts.bold, 32, colors.orange, true, 1);
 
       page.drawRectangle({ x: x + 14.77, y: y + 248, width: 241, height: 12, color: colors.paper });
@@ -1026,7 +1025,7 @@
       dibujarValor(guia.nombreVendedor, x + 141, y + 175, 112, y + 173, 12, fonts.regular, 12, 1);
       dibujarValor(guia.telefonoCliente, x + 15.77, y + 213.07, 112, y + 211, 12, fonts.regular, 12, 1);
       dibujarValor(guia.telefonoVendedor, x + 141, y + 213.02, 112, y + 211, 12, fonts.regular, 12, 1);
-      dibujarValor(guia.numeroDocumento, x + 15.77, y + 176.04, 234, y + 174, 12, fonts.regular, 12, 1);
+      dibujarValor(guia.numeroDocumento, x + 15.77, y + 176.04, 112, y + 174, 12, fonts.regular, 12, 1);
       dibujarValor(guia.direccionCliente, x + 15.77, y + 135.53, 234, y + 72, 76, fonts.regular, 12, 5);
     }
 
