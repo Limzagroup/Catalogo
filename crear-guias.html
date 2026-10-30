@@ -931,10 +931,10 @@
       if (!carpeta) return;
       carpetaPdfGuias = carpeta;
       if (await pedirPermisoCarpeta(carpeta)) {
-        estadoCarpetaPdf.textContent = `Carpeta guardada: ${carpeta.name}`;
+        estadoCarpetaPdf.textContent = `Ruta guardada: ${carpeta.name}`;
         seleccionarCarpetaPdf.textContent = 'Cambiar Ruta';
       } else {
-        estadoCarpetaPdf.textContent = `Carpeta guardada: ${carpeta.name}. Pulsa Cambiar Ruta para autorizarla nuevamente.`;
+        estadoCarpetaPdf.textContent = `Ruta guardada: ${carpeta.name}. Pulsa Cambiar Ruta para autorizarla nuevamente.`;
         seleccionarCarpetaPdf.textContent = 'Cambiar Ruta';
       }
     }).catch(() => {});
